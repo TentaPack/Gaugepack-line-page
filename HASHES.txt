@@ -1,0 +1,1 @@
+# Every release of the page, appended, never removed. One line per file: version, file, sha256, bytes.
