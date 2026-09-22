@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A private line · status</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="stylesheet" href="/line.css">
+<style>.days{display:grid;grid-template-columns:repeat(30,1fr);gap:3px;margin:14px 0 6px}.day{height:28px;border-radius:4px;background:rgba(242,239,233,.12)}.day.up{background:#2FBF71}.day.wobble{background:#E0A83C}.day.down{background:#E0447C}.day.none{background:rgba(242,239,233,.08)}</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow"><svg class="gp-mark gp-live" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12A9 9 0 0 0 18.894 6.215" stroke-opacity=".28"/><path class="gp-sweep" d="M18.894 6.215A9 9 0 1 0 21 12" pathLength="1"/><g class="gp-needle"><path d="M12 12L21 12"/><circle class="gp-dot" cx="21" cy="12" r="1.7" fill="#E0447C" stroke="none"/></g></g></svg>Gaugepack · A private line</p>
+  <h1 id="now">Checking the mailbox…</h1>
+  <p class="lead" id="nowtext">Your phone is asking the mailbox to write and read one thing, right now.</p>
+  <h2 style="font-size:18px;margin:22px 0 0">The last thirty days</h2>
+  <div class="days" id="days"></div>
+  <p class="hint" id="legend">Green: every check passed. Amber: some failed. Pink: most failed. Grey: no checks recorded, which means we were entirely down or the day hasn't happened yet.</p>
+  <p class="hint">The mailbox checks itself every five minutes from the inside and writes the result down; nothing outside us is trusted to say we are up. When we are completely down, nothing gets written, and the gap shows. That is the honest version of a status page. Messages sealed on your phone are never in the mailbox for more than the seconds between sending and "got it", or 24 hours when the other phone is away; an outage delays, it does not lose, unless it lasts past that.</p>
+  <p class="hint">What your phone runs: <a href="/code" style="color:inherit">line.gaugepack.com/code</a>.</p>
+</main>
+<script src="/status.js"></script>
+</body>
+</html>

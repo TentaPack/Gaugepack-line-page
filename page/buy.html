@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A private line · buy a year</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="stylesheet" href="/line.css">
+<style>.plans{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:16px 0 6px}.plan{border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:6px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}.plan strong{font-size:22px}.plan .hint{margin:0}.plan:hover,.plan:focus-visible{border-color:var(--accent);outline:none}.plan.best{border-color:var(--accent)}</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow"><svg class="gp-mark gp-live" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12A9 9 0 0 0 18.894 6.215" stroke-opacity=".28"/><path class="gp-sweep" d="M18.894 6.215A9 9 0 1 0 21 12" pathLength="1"/><g class="gp-needle"><path d="M12 12L21 12"/><circle class="gp-dot" cx="21" cy="12" r="1.7" fill="#E0447C" stroke="none"/></g></g></svg>Gaugepack · A private line</p>
+  <h1>A line, one year. Nobody can read it. Not even us.</h1>
+  <p class="lead">Pay once for a year. After paying, your phone makes the line itself: the key is made on your phone, printed as stickers, and never sent to us. The payment says "a line, one year", and nothing about which line. We never connect a card to a room.</p>
+  <div class="plans" id="plans">
+    <button type="button" class="plan" data-kind="pair"><strong>$36</strong><span>A pair</span><span class="hint">Two stickers, one line, a year.</span></button>
+    <button type="button" class="plan" data-kind="p6"><strong>$96</strong><span>A pack of 6</span><span class="hint">Six stickers, one line. A family, a crew.</span></button>
+    <button type="button" class="plan best" data-kind="p12"><strong>$180</strong><span>A pack of 12</span><span class="hint">Twelve stickers, one line. A team, a club.</span></button>
+    <button type="button" class="plan" data-kind="p30"><strong>$390</strong><span>A pack of 30</span><span class="hint">Thirty stickers, one line. A building, an event.</span></button>
+  </div>
+  <p class="hint" id="note"></p>
+  <h2 style="font-size:18px;margin:26px 0 6px">Renew a line you already have</h2>
+  <p class="hint" style="margin:0 0 10px">Open the line on your phone and tap "Renew" under the fingerprint words: it shows a six-letter code, good for ten minutes. Type it here and buy a year. The code points at your line only while it lives; afterwards nobody, including us, can tell which line was renewed.</p>
+  <form id="renew" class="row" style="margin:0;align-items:center"><input id="code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="Renewal code" aria-label="Renewal code" style="flex:1;min-width:140px;font:inherit;padding:12px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);letter-spacing:.2em;text-transform:uppercase"><button class="btn" type="submit" id="renewgo">A year, $36</button></form>
+  <p class="hint" id="renewnote"></p>
+  <h2 style="font-size:18px;margin:26px 0 6px">For a business: a door</h2>
+  <p class="hint" style="margin:0">One sticker that opens a fresh private line with whoever printed it, unlimited. $19 a month or $190 a year. <a href="/doors" style="color:inherit">The door, explained.</a></p>
+  <h2 style="font-size:18px;margin:26px 0 6px">What the payment knows</h2>
+  <ul class="hint" style="line-height:1.6;padding-left:18px;margin:0">
+    <li>Stripe takes the card and asks for an email for the receipt; that is Stripe's record of a purchase called "a private line, one year". It never learns which line, because the line does not exist until after you pay.</li>
+    <li>We keep a note that a payment was made and claimed, as a hash of the checkout, so it cannot be claimed twice. Not the room, not the key, not you.</li>
+    <li>A renewal pairs the checkout with its room for as long as the checkout is open, half an hour at most, then forgets. Everything else about a line is in the promise: <a href="/privacy" style="color:inherit">what we hold</a>.</li>
+  </ul>
+  <p class="hint"><a href="/" style="color:inherit">The front door</a> · <a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a></p>
+</main>
+<script src="/strings.js"></script>
+<script src="/buy.js"></script>
+</body>
+</html>

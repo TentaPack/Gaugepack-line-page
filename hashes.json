@@ -1,1 +1,100 @@
-{"releases":[]}
+{
+ "releases": [
+  {
+   "version": "31d01f1c2ef4525a",
+   "at": "2026-09-22T15:16:04.606Z",
+   "files": [
+    {
+     "file": "index.html",
+     "sha256": "b4549e55ca8419d261e540e65efc2ee66c2c091434d9dd25f880e14e44814b04",
+     "bytes": 23645
+    },
+    {
+     "file": "line.js",
+     "sha256": "49e4438f92a0d6b342ee3d39df927016652161c2e84329300f0be40da627bbbd",
+     "bytes": 93094
+    },
+    {
+     "file": "strings.js",
+     "sha256": "7e799a04344deeb26846e91436fa75dd74c11a80a1cfad42e63c8d97aeab332a",
+     "bytes": 23908
+    },
+    {
+     "file": "qrcode.js",
+     "sha256": "164fc2c1c9eaf0a03aa8dfdb855e82e41a5c6922fbad8bb3238116207e26bef7",
+     "bytes": 20387
+    },
+    {
+     "file": "line.css",
+     "sha256": "6dde474e1051bc4fb73227945bad5ff47050851eb0cd8368bafdc2c869121391",
+     "bytes": 8232
+    },
+    {
+     "file": "sw.js",
+     "sha256": "070541f80ce6026db9f5ddfef5d314344af2015f41e9e999f1cfad8a8bca9252",
+     "bytes": 5896
+    },
+    {
+     "file": "manifest.webmanifest",
+     "sha256": "a504a3019d42e238dc68eb16da639b198f9e85342ada2b83501c33ad195041fa",
+     "bytes": 495
+    },
+    {
+     "file": "vendor/lame.min.js",
+     "sha256": "15d285e2587b3bdbfd18a68de6ce07cc074f7480a82c3815da2dc1c348ec6df4",
+     "bytes": 156043
+    },
+    {
+     "file": "buy.html",
+     "sha256": "e9b4d9f7f55b5cdfc1a543342de58be6eddd3872ddf3a7c51094c169fdc4507b",
+     "bytes": 4784
+    },
+    {
+     "file": "buy.js",
+     "sha256": "150c6b5736b0e24261413a3356a03aabb505d7a883def70e911ac5a884d58b04",
+     "bytes": 1849
+    },
+    {
+     "file": "doors.html",
+     "sha256": "10e5e207bd45d34652948f0b18a86ae4723c25afed871ada23a86577b6b14ba3",
+     "bytes": 4653
+    },
+    {
+     "file": "doors.js",
+     "sha256": "0754782674946b7a351bec098f4f09eb7aad59614864c9b30719200e7bb873c5",
+     "bytes": 1127
+    },
+    {
+     "file": "terms.html",
+     "sha256": "1dd213e7a7b396905817bf22a16c568f5ccdede871c93006ecd849c8a1d5bba8",
+     "bytes": 5875
+    },
+    {
+     "file": "privacy.html",
+     "sha256": "f9e31353050940b3a30fccfdb31f9d0bdd641ace5490df8fd35f4890882365fa",
+     "bytes": 8087
+    },
+    {
+     "file": "code.html",
+     "sha256": "a1a616e07e4ebaff7b9c576b089f2859dbc08f239d54aa59e6fa08cf78c84ee1",
+     "bytes": 5521
+    },
+    {
+     "file": "code.js",
+     "sha256": "6ad457ae54f68d1f6fd40bb7acc9dae440e5896b9ae9241e965d74bd27adc18f",
+     "bytes": 4874
+    },
+    {
+     "file": "status.html",
+     "sha256": "077ee780c3b4328d2e5ad531db78470d614e5b63d123e374da21935cdfd99701",
+     "bytes": 2363
+    },
+    {
+     "file": "status.js",
+     "sha256": "d88c72db9693f22a7b510b4ca52933374921dab925493c2028aa203ba1214f21",
+     "bytes": 1570
+    }
+   ]
+  }
+ ]
+}

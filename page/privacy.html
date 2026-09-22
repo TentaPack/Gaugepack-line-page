@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A private line · privacy</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="stylesheet" href="/line.css">
+<style>.doc h2{font-size:18px;margin:26px 0 8px}.doc p,.doc li{color:var(--muted);font-size:15px;line-height:1.6}.doc ul{padding-left:18px;margin:0}.doc strong{color:var(--ink)}</style>
+</head>
+<body>
+<main class="wrap doc">
+  <p class="eyebrow"><svg class="gp-mark gp-live" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12A9 9 0 0 0 18.894 6.215" stroke-opacity=".28"/><path class="gp-sweep" d="M18.894 6.215A9 9 0 1 0 21 12" pathLength="1"/><g class="gp-needle"><path d="M12 12L21 12"/><circle class="gp-dot" cx="21" cy="12" r="1.7" fill="#E0447C" stroke="none"/></g></g></svg>Gaugepack · A private line</p>
+  <h1>Privacy. What we hold, and what we cannot.</h1>
+  <p class="lead">A private line is made by TentaPack LLC, Chicago, under the Gaugepack name. This page says in plain words what our side has. It is short because there is little.</p>
+
+  <h2>The promise</h2>
+  <p>Messages are sealed on your phone before they leave it. The key is the secret after the <code>#</code> in your sticker's link, which browsers never send to any server. Our mailbox holds sealed noise until the other phone says "got it", then deletes it. There is no account, no phone number, no name, no history of a line. The sticker is the key. If a feature would need our server to read, keep, or know who, we do not build it.</p>
+
+  <h2>What our side holds</h2>
+  <ul>
+    <li><strong>Sealed messages, briefly.</strong> Ciphertext, a random tag for the sending page, the time it arrived, and the hash of the sender's push address. Deleted when the other phone acknowledges it, or after 24 hours if nobody comes. We cannot open it; there is no key anywhere on our side.</li>
+    <li><strong>The register.</strong> For every line the maker or a buyer made: its room id (a hash of the key, from which the key cannot be recovered), the day it was made, the day it closes, a label the owner typed, and for a door its public key. No message, no time of use, no who. An organisation's lines carry the organisation's id; a partner's doors carry a hash the partner sent.</li>
+    <li><strong>Push addresses.</strong> If you turn the bell on, your phone's push address is kept on that line, keyed by its own hash, so we can tap the phone with the same words every time: "Something new. Open your code." Turn the bell off and it is deleted.</li>
+    <li><strong>The tally.</strong> Counts of the network, never the line: lines made, codes scanned, sealed messages, pictures, voice notes, calls, lines burned, years sold. Your phone sends one word with nothing attached; we add one. Kept by the hour and by the day, forever, and shown on gaugepack.com. Nothing per line, nothing with a who.</li>
+    <li><strong>Payments.</strong> A line bought for a year is known to us only as the hash of its checkout, marked paid and then claimed, so it cannot be claimed twice. It is never tied to the line that was made. A renewal pairs the checkout with its room for as long as the checkout is open, half an hour at most, then the pairing is deleted. A door is a business account and is a subscription: its register row carries the subscription's id. Stripe holds the card and the email you gave it under its own privacy policy; we never see the card.</li>
+    <li><strong>The published list.</strong> When your browser checks the page against the published list, it fetches that list from github.com; GitHub sees that fetch, as it sees any visit to a public repository, and nothing about your line travels with it.</li>
+    <li><strong>Rate limits.</strong> Cloudflare counts requests per network address for a minute to stop abuse, and keeps nothing.</li>
+    <li><strong>The maker's sign-in.</strong> One username and password for Gaugepack's own maker, as a signed cookie for twelve hours. Nobody else has an account here.</li>
+  </ul>
+
+  <h2>What stays on your phone</h2>
+  <p>The line's name and colour, your name in a group, a remembered line if you lit the mark (the key, on this phone only, off by default), the door's private key if this phone is a door, and the sealed conversation you were reading for this session so an app switch does not lose it. Burn or forget a line and these go. Nothing on your phone is sent to us except what the promise above says.</p>
+
+  <h2>The honest limits</h2>
+  <ul>
+    <li><strong>Whoever holds a sticker is in the line.</strong> A photograph of it is a copy. A word added to a line (said aloud, never typed into a text) makes the sticker alone useless.</li>
+    <li><strong>A direct call shows each phone the other's network address.</strong> Calls go phone to phone; the mailbox carries only the sealed handshake. Until a relay is on, a network that blocks direct connections cannot connect, and the two phones learn each other's addresses as any direct connection does.</li>
+    <li><strong>Unclaimed messages die at 24 hours.</strong> If the other phone never comes, the sealed message is deleted unread.</li>
+    <li><strong>A subpoena reaches a room of noise and a register of hashes and dates.</strong> We would hand over what we hold, which is what this page lists, and we cannot decrypt any of it.</li>
+    <li><strong>We cannot moderate what we cannot read.</strong> The report path: send us the code of a line used to harm someone, or found where it should not be, and we burn that line. We never pretend to see inside.</li>
+    <li><strong>No recovery.</strong> Lose both stickers and the line is gone. Burn it and every message goes; there is no undo.</li>
+    <li><strong>Stripe and Cloudflare are our suppliers.</strong> Stripe sees payments; Cloudflare runs the mailbox and the push relays run your phone's notifications. Each has its own policy; none can read a message.</li>
+  </ul>
+
+  <h2>The page itself, and how you know it is ours</h2>
+  <p>Everything above depends on the page your phone runs being the page we published. Whoever serves a page could serve a bad one, to everyone or to one person. So every version of every page file is published with its fingerprint in a public repository, <a href="https://github.com/TentaPack/Gaugepack-line-page" style="color:inherit">github.com/TentaPack/Gaugepack-line-page</a>, as a signed release, on a list that only ever grows. Your browser checks the files it received against that list at <a href="/code" style="color:inherit">/code</a>, fetching the list from github.com rather than from us; and your phone's service worker pins the version it verified and refuses any update whose files are not on the list, keeping the old version and telling you. The two borrowed pieces of code, the code drawer and the MP3 encoder, carry integrity hashes in the page so a swapped copy is not run.</p>
+  <p><strong>What that promises, honestly:</strong> we can be forced to publish bad code, and if we were, it would go on that public list, signed, for anyone to see and compare. What we cannot do is give one person different code without it being detectable. The list exists so that we cannot quietly change our own story, and so that a bad page reaches nobody's phone quietly.</p>
+
+  <h2>Check it</h2>
+  <p>The page your phone runs is fingerprinted and checked at <a href="/code" style="color:inherit">/code</a>; the mailbox's health is at <a href="/status" style="color:inherit">/status</a>. Questions or a report: <a href="mailto:support@gaugepack.com" style="color:inherit">support@gaugepack.com</a>. This page was last changed on 2026-09-22.</p>
+  <p><a href="/terms" style="color:inherit">Terms</a> · <a href="/" style="color:inherit">The front door</a></p>
+</main>
+</body>
+</html>

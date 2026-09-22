@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>A private line · the code</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="stylesheet" href="/line.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="eyebrow"><svg class="gp-mark gp-live" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12A9 9 0 0 0 18.894 6.215" stroke-opacity=".28"/><path class="gp-sweep" d="M18.894 6.215A9 9 0 1 0 21 12" pathLength="1"/><g class="gp-needle"><path d="M12 12L21 12"/><circle class="gp-dot" cx="21" cy="12" r="1.7" fill="#E0447C" stroke="none"/></g></g></svg>Gaugepack · A private line</p>
+  <h1>What your phone runs. Read it, and check it.</h1>
+  <p class="lead">"Nobody can read it, not even us" is only worth something if you can check. The weak point of any page that seals on the phone is the page itself: whoever serves it could serve a bad one. So the page is checked three ways, here, in your own browser.</p>
+  <div id="files"></div>
+  <p class="hint" id="server"></p>
+  <p class="hint" id="published"></p>
+  <p class="hint" id="pin"></p>
+  <h2 style="font-size:1.125rem;margin:26px 0 8px">The three checks, in plain words</h2>
+  <ul class="hint" style="line-height:1.6;padding-left:18px">
+    <li><strong style="color:var(--ink)">The server's word.</strong> The mailbox says what it is serving; your browser compares it with what it got. This catches a page changed on the way to you.</li>
+    <li><strong style="color:var(--ink)">The published list.</strong> Every version of every page file is published, with its fingerprint, in a public repository we do not control the history of once it is written: <a href="https://github.com/TentaPack/Gaugepack-line-page" style="color:inherit" target="_blank" rel="noopener">github.com/TentaPack/Gaugepack-line-page</a>. Each release is a signed tag; the list only ever grows. Your browser fetches that list from github.com, not from us, and checks every file it received against it. A file not on the list means one of two things: we published a new version minutes ago, or this phone was given code nobody else can see. The second is the attack this exists to catch.</li>
+    <li><strong style="color:var(--ink)">The pin.</strong> Your phone's service worker keeps the page it verified and serves that copy. When a new version appears it fetches the new files, checks each one against the published list, and only then switches. If a file is not on the list, it refuses the update, keeps the old version, and tells you. Two vendored files, the code drawer and the MP3 encoder, also carry an integrity hash in the page itself, so a swapped copy is not even run.</li>
+  </ul>
+  <h2 style="font-size:1.125rem;margin:26px 0 8px">What this does and does not promise</h2>
+  <p class="hint">We can be forced to publish bad code. If a court or a thief made us ship a page that leaks keys, it would go on the published list like any release, signed, in public, for anyone to read and compare with the last one. What we cannot do is give one person different code without it being detectable: a page that is not on the list fails these checks on that phone and is refused by its pin. The list is public precisely so that we cannot quietly change our own story.</p>
+  <p class="hint">What this cannot catch: a phone that is already compromised, a browser that lies about what it fetched, and the first visit on a browser with no service worker, which runs the page unpinned (this page still checks it against the list). The mailbox's own code is not published; it holds sealed noise and the register, and its behaviour is what the page's code, above, lets it hold.</p>
+  <h2 style="font-size:1.125rem;margin:26px 0 8px">What to look for in the code</h2>
+  <ul class="hint" style="line-height:1.6;padding-left:18px">
+    <li>In <code>line.js</code>: the secret is read from after the <code>#</code> in the address (<code>location.hash</code>), which browsers never send to any server. The key is derived from it on the phone; <code>seal</code> and <code>open</code> are AES-GCM on the phone.</li>
+    <li>Every <code>fetch</code> and the WebSocket go to this site only, and carry only sealed text, a session tag, and a device hash; the one outside fetch is the published list on github.com, which carries nothing. Search for <code>fetch(</code> and count.</li>
+    <li>What the mailbox holds per message is <code>{ s, c, t, d }</code> (tag, sealed text, time, device hash), deleted on "got it" or after 24 hours; there is no decryption anywhere because there is no key anywhere.</li>
+    <li>The tally (<code>/api/count</code>) receives one word with nothing attached. The register holds room ids (hashes), dates and a label. Neither holds a message.</li>
+  </ul>
+  <p class="hint">To check by hand: clone the repository, <code>git verify-tag</code> a release with the <code>allowed_signers</code> file in it, hash the files in <code>page/</code>, and compare with the fingerprints above. Status of the mailbox: <a href="/status" style="color:inherit">line.gaugepack.com/status</a>. Privacy: <a href="/privacy" style="color:inherit">what we hold</a>.</p>
+</main>
+<script src="/code.js"></script>
+</body>
+</html>

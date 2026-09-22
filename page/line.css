@@ -1,0 +1,83 @@
+:root{color-scheme:dark;--ink:#F2EFE9;--bg:#0A0A0A;--line:rgba(242,239,233,.14);--muted:rgba(242,239,233,.62);--accent:#E0447C;--me:rgba(224,68,124,.22);--me-line:rgba(224,68,124,.5)}
+*{box-sizing:border-box}html{font:-apple-system-body;font-size:100%}html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,system-ui,sans-serif;font-size:1rem;line-height:1.5}
+/* Sizes are in rem so the phone's large-text setting scales every screen (iPhone: -apple-system-body follows Dynamic Type). */
+.wrap{max-width:560px;margin:0 auto;padding:max(18px,env(safe-area-inset-top)) 18px max(24px,env(safe-area-inset-bottom));min-height:100dvh;display:flex;flex-direction:column}
+.hidden{display:none!important}
+.eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:0.6875rem;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.eyebrow svg{width:16px;height:16px;color:var(--ink)}
+h1{font-family:-apple-system,system-ui,sans-serif;font-weight:700;font-size:clamp(26px,6.5vw,36px);line-height:1.15;margin:0 0 14px;text-wrap:balance}
+.lead{color:var(--muted);margin:0 0 18px}
+.hint{color:var(--muted);font-size:0.8125rem;margin:10px 0 0}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
+.btn{font:600 0.9375rem/1 inherit;color:#fff;background:var(--accent);border:0;border-radius:999px;padding:13px 20px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:8px 12px;font-size:0.8125rem}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 0}
+.codes{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.codes figure{margin:0;background:#fff;border-radius:12px;padding:12px;text-align:center}
+.codes figure div svg{width:100%;height:auto;display:block}
+.codes figcaption{font-family:ui-monospace,Menlo,monospace;font-size:0.6875rem;letter-spacing:.16em;text-transform:uppercase;color:#16141D;margin-top:8px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:10px}.top .eyebrow{margin:0}
+#log{list-style:none;padding:0 0 70px;margin:14px 0;flex:1;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+#log li{max-width:82%;padding:10px 14px;border-radius:16px;background:rgba(242,239,233,.07);border:1px solid var(--line);word-wrap:break-word}
+#log li.me{align-self:flex-end;background:var(--me);border-color:var(--me-line)}
+#log li time{display:block;font-family:ui-monospace,Menlo,monospace;font-size:0.625rem;letter-spacing:.1em;color:var(--muted);margin-top:4px}
+.composer{display:flex;gap:8px;position:sticky;bottom:max(12px,env(safe-area-inset-bottom))}
+.composer input{flex:1;font:inherit;padding:13px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink)}
+.composer input:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+/* Gaugepack's mark: live breathes, busy sweeps (the same motion as the app). */
+.eyebrow .gp-mark{width:16px;height:16px;color:var(--ink)}
+.gp-needle{transform-origin:12px 12px}
+.gp-live .gp-needle{animation:gpBreathe 4s cubic-bezier(.4,0,.6,1) infinite}
+@keyframes gpBreathe{0%,100%{transform:rotate(0deg)}50%{transform:rotate(1.5deg)}}
+.gp-busy .gp-needle{animation:gpSweepNeedle 1.8s cubic-bezier(.2,.7,.2,1) infinite}
+.gp-busy .gp-sweep{stroke-dasharray:1;animation:gpSweepFill 1.8s cubic-bezier(.2,.7,.2,1) infinite}
+.gp-busy .gp-dot{animation:gpDot 1.8s linear infinite}
+@keyframes gpSweepNeedle{0%{transform:rotate(-320deg)}70%,100%{transform:rotate(0deg)}}
+@keyframes gpSweepFill{0%{stroke-dashoffset:1}70%,100%{stroke-dashoffset:0}}
+@keyframes gpDot{0%,60%{opacity:0}72%,100%{opacity:1}}
+#sendmark{display:inline-flex;vertical-align:middle;margin-right:6px}#sendmark svg{width:16px;height:16px;color:#fff}
+.sel{font:inherit;font-size:0.8125rem;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink)}
+.cam{display:inline-flex;align-items:center;justify-content:center;padding:0;width:46px;height:46px;flex-shrink:0}
+#log li img{display:block;max-width:100%;border-radius:10px}
+#log li.burning{animation:gpBurn .6s ease-in forwards}
+@keyframes gpBurn{0%{opacity:1;filter:none}30%{opacity:1;box-shadow:0 0 0 2px var(--accent),0 0 18px var(--accent)}100%{opacity:0;transform:scale(.96);filter:blur(2px)}}
+#log li .left{display:inline;margin-left:6px;color:var(--accent)}
+/* Focus is visible on everything that takes it. */
+.btn:focus-visible,.act:focus-visible,.sel:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,#log li:focus-visible,.once:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Reduced motion: nothing sweeps or breathes, and a burned message fades instead of flickering. */
+@media (prefers-reduced-motion: reduce){.gp-mark *{animation:none!important}#mic.rec{animation:none}#log li.burning{animation:none;opacity:0;transition:opacity .6s ease}}
+
+#viewer{position:fixed;inset:0;background:#000;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px}
+#viewer img{max-width:100%;max-height:85vh;border-radius:8px}
+#mic.rec{background:var(--accent);color:#fff;border-color:var(--accent);animation:gpRec 1s ease-in-out infinite}
+@keyframes gpRec{0%,100%{box-shadow:0 0 0 0 rgba(224,68,124,.5)}50%{box-shadow:0 0 0 8px rgba(224,68,124,0)}}
+#log li audio{display:block;width:240px;max-width:100%}
+#log li .once{display:inline-block;padding:10px 14px;border:1px dashed var(--accent);border-radius:12px;color:var(--accent);cursor:pointer}
+
+#log li{position:relative;cursor:default}
+#log li .who{display:block;font-family:ui-monospace,Menlo,monospace;font-size:0.625rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+#log li blockquote{margin:0 0 6px;padding:4px 10px;border-left:2px solid var(--accent);color:var(--muted);font-size:0.8125rem}
+#log li .rx{display:block}#log li .rx span{display:inline-block;font-size:0.875rem;margin:4px 4px 0 0;padding:1px 6px;border-radius:999px;background:rgba(242,239,233,.08)}#log li .rx span.mine{outline:1px solid var(--accent)}
+.acts{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.act{font:inherit;font-size:0.8125rem;padding:5px 9px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+#log li.waiting{opacity:.55}#log li.waiting time::after{content:" · waiting for signal";color:var(--accent)}
+
+.markbtn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:-9px 2px -9px -9px;padding:0;border:0;border-radius:999px;background:transparent;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.markbtn .gp-mark{width:18px;height:18px}
+.markbtn .gp-dot{fill:rgba(242,239,233,.35);transition:fill .3s}
+.markbtn[aria-pressed="true"] .gp-dot{fill:var(--accent)}
+.markbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#mic{touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#mic .stopicon{display:none}#mic.rec .micicon{display:none}#mic.rec .stopicon{display:block}
+.lrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.lmeta{display:flex;flex-direction:column;gap:2px;min-width:0}.lmeta .hint{margin:0}
+.lacts{display:flex;gap:6px;flex-wrap:wrap}
+#callpanel{position:relative;margin:10px 0;padding:12px;border:1px solid var(--line);border-radius:16px;background:#111;display:grid;gap:8px;justify-items:center}
+#remote{width:100%;max-height:52vh;border-radius:12px;background:#000;object-fit:cover}
+#local{position:absolute;top:20px;right:20px;width:26%;max-width:120px;border-radius:10px;background:#000;border:1px solid var(--line)}
+#callpanel.voice #remote,#callpanel.voice #local{display:none}
+#callpanel .callmark{display:none}#callpanel.voice .callmark{display:block;color:var(--ink)}#callpanel.voice .callmark .gp-mark{width:64px;height:64px}
+#log li video{display:block;max-width:100%;max-height:320px;border-radius:10px;background:#000}
+.markbtn[aria-pressed="true"] .bell-dot{fill:var(--accent)}
