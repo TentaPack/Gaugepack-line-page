@@ -196,6 +196,7 @@
     if (data.closed) { stop(); show("closed"); return; }
     if (typeof data.here === "number") { $("here").textContent = data.here <= 1 ? tr("Only you here") : tr("{n} here now", { n: data.here }); const can = !pc; $("calla").disabled = !can; $("callv").disabled = !can; }
     if (typeof data.until === "number") untilUi(data.until);
+    if (typeof data.ticket === "string") turnTicket = data.ticket;
     const acks = [];
     for (const m of data.messages || []) {
       const k = m.c.slice(0, 24); if (m.id) acks.push(m.id); if (seen.has(k)) continue; seen.add(k);
@@ -217,9 +218,10 @@
     const b = document.createElement("button"); b.type = "button"; b.className = "act"; b.textContent = tr("Renew"); b.onclick = renewCode; box.appendChild(b);
   }
   async function renewCode() {
-    const box = $("until"); const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const code = [...crypto.getRandomValues(new Uint8Array(6))].map((x) => A[x % A.length]).join("");
-    const r = await fetch("/api/renew/code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: roomId, code }) }).catch(() => null);
-    if (!r || !r.ok) { box.append(r && r.status === 404 ? tr(" This line isn't in the register, so it can't be renewed here.") : tr(" Couldn't make a renewal code just now.")); return; }
+    const box = $("until");
+    const r = await fetch("/api/renew/code", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: roomId }) }).catch(() => null);
+    const code = r && r.ok ? (await r.json().catch(() => ({}))).code : "";
+    if (!r || !r.ok || !code) { box.append(r && r.status === 404 ? tr(" This line isn't in the register, so it can't be renewed here.") : tr(" Couldn't make a renewal code just now.")); return; }
     box.innerHTML = ""; box.append(tr("Renewal code ")); const c = document.createElement("strong"); c.style.color = "var(--ink)"; c.style.letterSpacing = ".2em"; c.textContent = code; box.appendChild(c); box.append(tr(", good for ten minutes. "));
     const a = document.createElement("a"); a.href = `/buy?renew=${code}`; a.target = "_blank"; a.rel = "noopener"; a.style.color = "inherit"; a.textContent = tr("Buy a year with it"); box.appendChild(a); box.append(tr(", here or on any other screen."));
   }
@@ -402,8 +404,8 @@
   // starts and uses them if the mailbox has any; otherwise STUN only, and a
   // network that blocks direct connections says so.
   const STUN = { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] };
-  let relayOn = false;
-  async function iceConfig() { try { const d = await (await fetch("/api/turn", { cache: "no-store" })).json(); relayOn = !!d.relay; if (Array.isArray(d.iceServers) && d.iceServers.length) return { iceServers: d.iceServers }; } catch {} relayOn = false; return STUN; }
+  let relayOn = false, turnTicket = "";
+  async function iceConfig() { try { const d = await (await fetch(`/api/turn?ticket=${encodeURIComponent(turnTicket)}`, { cache: "no-store" })).json(); relayOn = !!d.relay; if (Array.isArray(d.iceServers) && d.iceServers.length) return { iceServers: d.iceServers }; } catch {} relayOn = false; return STUN; }
   const callSignal = (v, extra = {}) => sendEnvelope({ k: "call", v, x: Date.now() + 90000, ...extra }, true);
   async function gathered(p) { if (p.iceGatheringState === "complete") return; await new Promise((res) => { const t = setTimeout(res, relayOn ? 4500 : 2500); p.onicegatheringstatechange = () => { if (p.iceGatheringState === "complete") { clearTimeout(t); res(); } }; }); }
   async function media(video) {
@@ -590,8 +592,9 @@
       b.onclick = async () => {
         try {
           const sec = await openWith(d.priv, k.c); if (!/^[A-Za-z0-9_-]{43}$/.test(sec)) throw new Error("bad");
-          await fetch(`/api/door/${doorId}/ack`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read, ids: [k.id] }) });
           await useSecret(sec); pendingWord = "";
+          // The room this phone opened from the sealed knock is the one the door extends to its own date; a knock that named another room extends nothing.
+          await fetch(`/api/door/${doorId}/ack`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read, ids: [k.id], rooms: { [k.id]: roomId } }) });
           { const m = remAll(); m[roomId] = { secret: sec, word: "" }; remSave(m); if (!namesGet()[roomId]) nameSet(tr("Knock, {d}", { d: new Date(k.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }), "#E0447C"); }
           setRoute("/line", sec); enterRoom();
         } catch { h.textContent = "Couldn't open this knock (it may have been sealed to another door)."; }

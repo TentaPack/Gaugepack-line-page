@@ -101,7 +101,7 @@
     "This door has closed. Reopen it from the maker.": "Esta puerta se cerró. Reábrela desde el creador.", "This phone gets a tap when someone knocks.": "Este teléfono recibe un aviso cuando alguien toca.",
     "Knock.": "Toca.", "This door opens a private line with whoever printed it. Your phone makes the line and seals its key to their door; only their phone can open it. Nobody else, not even us, can read what follows.": "Esta puerta abre una línea privada con quien la imprimió. Tu teléfono hace la línea y sella su llave a su puerta; solo su teléfono puede abrirla. Nadie más, ni siquiera nosotros, puede leer lo que sigue.",
     "Open a line": "Abrir una línea", "Making the line…": "Haciendo la línea…", "Closed": "Cerrada", "This door is closed.": "Esta puerta está cerrada.", "Too many knocks from here; try in a minute.": "Demasiados toques desde aquí; prueba en un minuto.", "Couldn't knock.": "No se pudo tocar.",
-    "No account, no number. When they answer, you're both here; you can talk, send pictures, or call.": "Sin cuenta, sin número. Cuando contesten, están los dos aquí; pueden hablar, enviar fotos o llamar.",
+    "No account, no number. When they answer, you're both here; you can talk, send pictures, or call. The line opens for a week; once they answer it lasts as long as their door.": "Sin cuenta, sin número. Cuando contesten, están los dos aquí; pueden hablar, enviar fotos o llamar. La línea se abre por una semana; cuando contesten dura tanto como su puerta.",
     "Knocked. Their phone has been tapped; when they answer, you're both here.": "Tocaste. Su teléfono recibió un aviso; cuando contesten, están los dos aquí.",
     // the claim page
     "Paid. Now make your line.": "Pagado. Ahora haz tu línea.",
