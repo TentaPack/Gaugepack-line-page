@@ -6,6 +6,24 @@
 // the mailbox once and are burned there on delivery.
 (() => {
   const $ = (id) => document.getElementById(id);
+  // The key never stays in the address bar. Browsers keep the address in
+  // history and in bookmarks, and both sync to Apple's and Google's
+  // accounts; a line's key sitting there is a copy of the sticker we did
+  // not make. So the part after the # is read here, once, kept in this
+  // tab's own storage (never synced, gone when the tab closes), and the
+  // address is emptied before anything else runs. A reload restores the
+  // room from that storage; nothing below ever writes a key into the
+  // address again. The sticker, or "remember this line", are the ways back.
+  const ROUTE = (() => {
+    const path = location.pathname, search = location.search; let hash = location.hash.slice(1);
+    try {
+      if (hash) sessionStorage.setItem("line:route", JSON.stringify({ path, hash }));
+      else { const r = JSON.parse(sessionStorage.getItem("line:route") || "null"); if (r && r.path === path) hash = r.hash; }
+    } catch {}
+    if (location.hash || location.search) history.replaceState(null, "", path);
+    return { path, search, hash };
+  })();
+  const setRoute = (path, hash) => { try { if (hash) sessionStorage.setItem("line:route", JSON.stringify({ path, hash })); else sessionStorage.removeItem("line:route"); } catch {} if (location.pathname !== path || location.hash || location.search) history.replaceState(null, "", path); };
   // Words shown to people go through the strings file (Spanish by the phone's language); without it, English.
   const tr = (s, vars) => window.t ? window.t(s, vars) : (vars ? Object.entries(vars).reduce((o, [k, v]) => o.split(`{${k}}`).join(String(v)), s) : s);
   const show = (id) => { for (const s of ["make", "room", "dead", "home", "word", "pick", "closed", "door", "knock", "claim", "org"]) $(s).classList.toggle("hidden", s !== id); if (id !== "door") stopDoorPoll(); };
@@ -458,7 +476,7 @@
   $("callv").onclick = () => startCall(true);
   addEventListener("pagehide", () => { if (pc) endCall(true); });
 
-  async function burnLine() { count("burn"); try { await fetch(`/api/room/${roomId}`, { method: "DELETE" }); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
+  async function burnLine() { count("burn"); setRoute(location.pathname, ""); try { await fetch(`/api/room/${roomId}`, { method: "DELETE" }); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
   $("burn").addEventListener("click", async () => {
     if (!confirm(tr("Burn the line? Every message goes and both codes become paper. There is no undo."))) return;
     await burnLine();
@@ -531,7 +549,7 @@
     if (!r.ok) { $("doornote").textContent = r.status === 403 ? "That door link was already used or is older than an hour. Make a new one from the maker." : "Couldn't make the door."; show("door"); return; }
     const made = await r.json().catch(() => ({}));
     const m = doorsAll(); m[id] = { priv, pub: b64u(pubRaw), read, label: "", made: Date.now(), until: made.until || 0, sold: !!made.sold }; doorsSave(m);
-    history.replaceState(null, "", "/door"); showDoor(id);
+    setRoute("/door", ""); showDoor(id);
     if (made.sold) $("doornote").textContent = `This phone is the door now; only it can answer. Print the code on your card, your window, your table. Open while the subscription is paid (through ${new Date(made.until).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })} so far); manage it from the receipt Stripe emailed you.`;
   }
   let doorTimer = null, doorId = null;
@@ -575,7 +593,7 @@
           await fetch(`/api/door/${doorId}/ack`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read, ids: [k.id] }) });
           await useSecret(sec); pendingWord = "";
           { const m = remAll(); m[roomId] = { secret: sec, word: "" }; remSave(m); if (!namesGet()[roomId]) nameSet(tr("Knock, {d}", { d: new Date(k.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }), "#E0447C"); }
-          history.replaceState(null, "", `/line#${sec}`); enterRoom();
+          setRoute("/line", sec); enterRoom();
         } catch { h.textContent = "Couldn't open this knock (it may have been sealed to another door)."; }
       };
       row.appendChild(b); box.appendChild(row);
@@ -591,7 +609,7 @@
       const r = await fetch(`/api/door/${id}/knock`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: roomId, c }) });
       if (!r.ok) { $("knocknote").textContent = r.status === 402 ? tr("This door is closed.") : r.status === 429 ? tr("Too many knocks from here; try in a minute.") : tr("Couldn't knock."); $("knockgo").disabled = false; $("knockgo").textContent = tr("Open a line"); return; }
       count("line");
-      history.replaceState(null, "", `/line#${sec}`); enterRoom(); $("status").textContent = tr("Knocked. Their phone has been tapped; when they answer, you're both here.");
+      setRoute("/line", sec); enterRoom(); $("status").textContent = tr("Knocked. Their phone has been tapped; when they answer, you're both here.");
     } catch (e) { $("knocknote").textContent = `Couldn't open a line here (${e && e.name}: ${e && e.message}).`; $("knockgo").disabled = false; $("knockgo").textContent = tr("Open a line"); }
   }
 
@@ -689,7 +707,7 @@
       $("decoy").classList.add("hidden");
     };
     $("copy").onclick = async () => { try { await navigator.clipboard.writeText(link); $("copy").textContent = tr("Copied"); setTimeout(() => ($("copy").textContent = tr("Copy the link")), 1500); } catch {} };
-    $("enter").onclick = () => { history.replaceState(null, "", `/line#${s}${word ? ".w" : ""}`); enterRoom(); };
+    $("enter").onclick = () => { setRoute("/line", `${s}${word ? ".w" : ""}`); enterRoom(); };
     $("dl").onclick = (e) => { e.preventDefault(); downloadCodes(n); };
     show("make");
   }
@@ -701,7 +719,7 @@
   const orgTok = () => { try { return localStorage.getItem("line:org") || ""; } catch { return ""; } };
   const orgApi = async (path, body) => fetch(path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", authorization: `Bearer ${orgTok()}` }, body: body ? JSON.stringify(body) : undefined });
   async function orgPage(tok) {
-    if (tok) { try { localStorage.setItem("line:org", tok); } catch {} history.replaceState(null, "", "/org"); }
+    if (tok) { try { localStorage.setItem("line:org", tok); } catch {} setRoute("/org", ""); }
     if (!orgTok()) { show("home"); $("fpline").textContent = "This organisation's link is missing or expired. Ask Gaugepack for a fresh one."; return; }
     const r = await orgApi("/api/org").catch(() => null); if (!r || !r.ok) { show("home"); $("fpline").textContent = r && r.status === 401 ? "This organisation's link no longer works. Ask Gaugepack for a fresh one." : "Couldn't reach the mailbox."; return; }
     const o = await r.json(); show("org");
@@ -733,14 +751,14 @@
   // the room opens for a year. The word, if any, is part of the key, so it
   // is asked for before the room id exists.
   async function claimPage(s) {
-    const sid = new URLSearchParams(location.search).get("s"); let token = /^[a-f0-9]{32}$/.test(s) ? s : "", n = 2;
+    const sid = new URLSearchParams(ROUTE.search).get("s"); let token = /^[a-f0-9]{32}$/.test(s) ? s : "", n = 2;
     if (sid) {
       const r = await fetch("/api/claim/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session: sid }) }).catch(() => null);
       const d = r ? await r.json().catch(() => ({})) : {};
       if (d.done) { show("claim"); $("claimtitle").textContent = tr("Renewed."); $("claimlead").textContent = tr("That line is open for another year. Open it on your phone as always; the date under the fingerprint words has moved."); $("claimrow").classList.add("hidden"); return; }
-      if (d.kind && d.kind.startsWith("door")) { location.replace(`/door#${d.token}`); return; }
+      if (d.kind && d.kind.startsWith("door")) { setRoute("/door", d.token); location.replace("/door"); return; }
       if (!d.token) { show("claim"); $("claimtitle").textContent = d.error === "claimed" ? tr("Already claimed.") : d.error === "unpaid" ? tr("Not paid yet.") : tr("Couldn't find that payment."); $("claimlead").textContent = d.error === "claimed" ? "This payment already made its line. If that wasn't you, write to support@gaugepack.com from the receipt's email." : d.error === "unpaid" ? "Stripe hasn't confirmed the payment. Wait a moment and reload this page." : "Reload this page in a moment; if it still fails, write to support@gaugepack.com with your receipt."; $("claimrow").classList.add("hidden"); return; }
-      token = d.token; n = d.n || 2; history.replaceState(null, "", `/claim#${token}`);
+      token = d.token; n = d.n || 2; setRoute("/claim", token);
     }
     if (!token) { show("home"); return; }
     show("claim");
@@ -752,7 +770,7 @@
         const r = await fetch("/api/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, id }) });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { $("claimnote").textContent = r.status === 403 ? tr("This claim was already used, or is older than a week.") : tr("Couldn't open the line; try again in a moment."); $("claimgo").disabled = false; $("claimgo").textContent = tr("Make the line"); return; }
-        history.replaceState(null, "", "/claim"); await makeLine({ secret, word, n: d.n || n, until: d.until });
+        setRoute("/claim", ""); await makeLine({ secret, word, n: d.n || n, until: d.until });
       } catch (e) { $("claimnote").textContent = `Couldn't make the line here (${e && e.name}).`; $("claimgo").disabled = false; $("claimgo").textContent = tr("Make the line"); }
     };
   }
@@ -820,26 +838,26 @@
   // the link says one is needed); a remembered one enters by itself; none
   // shows the front door.
   (async () => {
-    let s = location.hash.slice(1), needsWord = false;
+    let s = ROUTE.hash, needsWord = false;
     if (s.endsWith(".w")) { s = s.slice(0, -2); needsWord = true; }
-    if (location.pathname === "/door") { const doors = doorsAll(); if (/^[a-f0-9]{32}$/.test(s)) { await makeDoor(s); return; } const ids = Object.keys(doors); if (ids.length) { await showDoor(ids[0]); return; } show("home"); return; }
-    if (location.pathname === "/claim") { await claimPage(s); return; }
-    if (location.pathname === "/org") { await orgPage(/^[a-f0-9]{12}\.\d+\.[0-9a-f]{64}$/.test(s) ? s : ""); return; }
-    if (location.pathname === "/d") { if (!/^[A-Za-z0-9_-]{86,90}$/.test(s)) { show("home"); return; } try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") count(location.search === "?q" ? "scan" : "link"); } catch {} show("knock"); $("knockgo").onclick = () => knock(s); return; }
-    if (location.pathname !== "/make" && !/^[A-Za-z0-9_-]{43}$/.test(s)) {
+    if (ROUTE.path === "/door") { const doors = doorsAll(); if (/^[a-f0-9]{32}$/.test(s)) { setRoute("/door", ""); await makeDoor(s); return; } const ids = Object.keys(doors); if (ids.length) { await showDoor(ids[0]); return; } show("home"); return; }
+    if (ROUTE.path === "/claim") { await claimPage(s); return; }
+    if (ROUTE.path === "/org") { await orgPage(/^[a-f0-9]{12}\.\d+\.[0-9a-f]{64}$/.test(s) ? s : ""); return; }
+    if (ROUTE.path === "/d") { if (!/^[A-Za-z0-9_-]{86,90}$/.test(s)) { show("home"); return; } try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") count(ROUTE.search === "?q" ? "scan" : "link"); } catch {} show("knock"); $("knockgo").onclick = () => knock(s); return; }
+    if (ROUTE.path !== "/make" && !/^[A-Za-z0-9_-]{43}$/.test(s)) {
       const m = remAll(); const ids = Object.keys(m);
-      if (ids.length === 1) { const r = m[ids[0]]; s = r.secret; needsWord = false; history.replaceState(null, "", `/line#${s}${r.word ? ".w" : ""}`); if (r.word) { await useSecret(s, r.word); pendingWord = r.word; enterRoom(); return; } }
+      if (ids.length === 1) { const r = m[ids[0]]; s = r.secret; needsWord = false; setRoute("/line", `${s}${r.word ? ".w" : ""}`); if (r.word) { await useSecret(s, r.word); pendingWord = r.word; enterRoom(); return; } }
       else if (ids.length > 1) {
         // Several lines on this phone: pick one by its name and colour.
         const names = namesGet(); const list = $("lines"); list.innerHTML = "";
-        for (const id of ids) { const n = names[id] || {}; const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.style.borderColor = n.colour || "var(--line)"; b.style.color = n.colour || "var(--ink)"; b.textContent = n.name || "A line"; b.onclick = async () => { const r = m[id]; history.replaceState(null, "", `/line#${r.secret}${r.word ? ".w" : ""}`); await useSecret(r.secret, r.word || ""); pendingWord = r.word || ""; count("return"); enterRoom(); }; list.appendChild(b); }
-        if (Object.keys(doorsAll()).length) { const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.textContent = "Your door"; b.onclick = () => { history.replaceState(null, "", "/door"); showDoor(Object.keys(doorsAll())[0]); }; list.appendChild(b); }
+        for (const id of ids) { const n = names[id] || {}; const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.style.borderColor = n.colour || "var(--line)"; b.style.color = n.colour || "var(--ink)"; b.textContent = n.name || "A line"; b.onclick = async () => { const r = m[id]; setRoute("/line", `${r.secret}${r.word ? ".w" : ""}`); await useSecret(r.secret, r.word || ""); pendingWord = r.word || ""; count("return"); enterRoom(); }; list.appendChild(b); }
+        if (Object.keys(doorsAll()).length) { const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.textContent = "Your door"; b.onclick = () => { setRoute("/door", ""); showDoor(Object.keys(doorsAll())[0]); }; list.appendChild(b); }
         show("pick"); return;
       }
     }
-    if (location.pathname !== "/make" && /^[A-Za-z0-9_-]{43}$/.test(s)) {
+    if (ROUTE.path !== "/make" && /^[A-Za-z0-9_-]{43}$/.test(s)) {
       // Arrived by a code or a link (not a reload): one anonymous "scan" for the tally.
-      try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") count(location.search === "?q" ? "scan" : "link"); } catch {}
+      try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") count(ROUTE.search === "?q" ? "scan" : "link"); } catch {}
       if (needsWord) {
         show("word");
         $("wordform").onsubmit = async (e) => { e.preventDefault(); const w = $("word").value; if (!w.trim()) return; $("wordgo").disabled = true; $("wordgo").textContent = "Opening"; await useSecret(s, w); pendingWord = w; enterRoom(); };
@@ -860,11 +878,11 @@
       $("fpline").innerHTML = `This page's sealing code: <code>${h.slice(0, 16)}…</code>${server.sha256 === h ? " matches what the server says it serves." : " <strong>does not match</strong> what the server says it serves."}` + pinText.replace(/</g, "&lt;");
     } catch { $("fpline").textContent = ""; }
     // Private until launch: /make#<key> unlocks the maker when the key matches the Worker's secret.
-    if (location.pathname === "/make") {
+    if (ROUTE.path === "/make") {
       // Signed in by cookie, or (until the account exists) by the key after the #.
       const r = await fetch("/api/make", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: s }) });
       const d = await r.json().catch(() => ({}));
-      if (r.ok) { $("newwrap").classList.remove("hidden"); history.replaceState(null, "", "/make"); }
+      if (r.ok) { $("newwrap").classList.remove("hidden"); setRoute("/make", ""); }
       else if (d.account) {
         $("signin").classList.remove("hidden");
         $("signin").onsubmit = async (e) => {
