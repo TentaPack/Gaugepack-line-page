@@ -3,6 +3,8 @@
 // buyer's phone after paying, on the claim page.
 (() => {
   const $ = (id) => document.getElementById(id);
+  // One word for the tally, "the page was opened", with nothing attached; a reload is not a visit.
+  try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") fetch("/api/count", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ k: "buy_view" }), keepalive: true }).catch(() => {}); } catch {}
   let on = null;
   fetch("/api/prices").then((r) => r.json()).then((p) => { on = !!p.on; if (!on) $("note").textContent = t("Not yet: buying opens soon. If you have a line already, it keeps working."); }).catch(() => {});
   async function buy(kind, code) {

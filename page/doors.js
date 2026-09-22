@@ -2,6 +2,8 @@
 // success page hands the phone a door token and that phone makes the door.
 (() => {
   const $ = (id) => document.getElementById(id);
+  // One word for the tally, "the page was opened", with nothing attached; a reload is not a visit.
+  try { const nav = performance.getEntriesByType("navigation")[0]; if (!nav || nav.type === "navigate") fetch("/api/count", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ k: "doors_view" }), keepalive: true }).catch(() => {}); } catch {}
   fetch("/api/prices").then((r) => r.json()).then((p) => { if (!p.on) $("note").textContent = "Not yet: buying opens soon. Doors are made from the maker until then."; }).catch(() => {});
   for (const b of document.querySelectorAll(".plan")) b.onclick = async () => {
     $("note").textContent = t("Opening the checkout…");

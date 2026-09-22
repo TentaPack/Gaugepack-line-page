@@ -329,9 +329,9 @@
           let out = blob; try { out = await toMp3(blob); } catch (e) { console.warn("mp3", e); }
           const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(out); });
           await sendEnvelope({ k: "audio", v: url, mime: out.type, s: secs });
-        } catch (e) { $("status").textContent = `Couldn't send that voice note (${e && e.name || "unknown"}).`; }
+        } catch (e) { count("voice_failed"); $("status").textContent = `Couldn't send that voice note (${e && e.name || "unknown"}).`; }
       };
-      rec.onerror = (ev) => { $("status").textContent = `The recorder stopped (${ev && ev.error && ev.error.name || "error"}).`; try { rec.stop(); } catch {} };
+      rec.onerror = (ev) => { count("voice_failed"); $("status").textContent = `The recorder stopped (${ev && ev.error && ev.error.name || "error"}).`; try { rec.stop(); } catch {} };
       try { rec.start(500); } catch { rec.start(); }
       recStart = Date.now(); $("mic").classList.add("rec"); $("mic").title = tr("Recording; tap to send"); $("recbar").classList.remove("hidden");
       const tick = () => { const sec = Math.round((Date.now() - recStart) / 1000); $("recbar").textContent = tr("Recording {m}:{s}. Tap the pink square to send.", { m: Math.floor(sec / 60), s: String(sec % 60).padStart(2, "0") }); };
@@ -372,11 +372,11 @@
     try {
       let out = f;
       if (f.size > 500 * 1024 || !/^video\/(mp4|quicktime)$/.test(f.type)) out = await shrinkVideo(f);
-      if (out.size > 2600 * 1024) { $("status").textContent = tr("That video is too big even shrunk; try a shorter one."); return; }
+      if (out.size > 2600 * 1024) { count("video_failed"); $("status").textContent = tr("That video is too big even shrunk; try a shorter one."); return; }
       $("status").textContent = tr("Sealing the video…");
       const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(out); });
       await sendEnvelope({ k: "video", v: url, mime: out.type });
-    } catch (e) { $("status").textContent = `Couldn't send that video (${e && e.name || "error"}).`; }
+    } catch (e) { count("video_failed"); $("status").textContent = `Couldn't send that video (${e && e.name || "error"}).`; }
   });
   async function shrinkVideo(file) {
     const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.src = URL.createObjectURL(file);
@@ -412,12 +412,14 @@
     const st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: video ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } : false });
     localStream = st; $("local").srcObject = video ? st : null; return st;
   }
+  // Did this call go through the relay? The chosen candidate pair says; a count, never an address.
+  async function relayed(p) { try { const st = await p.getStats(); let pair = null; for (const v of st.values()) if (v.type === "transport" && v.selectedCandidatePairId) pair = st.get(v.selectedCandidatePairId); if (!pair) for (const v of st.values()) if (v.type === "candidate-pair" && (v.selected || v.state === "succeeded")) { pair = v; break; } if (!pair) return false; const l = st.get(pair.localCandidateId), r = st.get(pair.remoteCandidateId); return !!((l && l.candidateType === "relay") || (r && r.candidateType === "relay")); } catch { return false; } }
   function newPc(ice) {
     const p = new RTCPeerConnection(ice || STUN);
     p.ontrack = (e) => { $("remote").srcObject = e.streams[0]; if (!callVideo) { $("remote").srcObject = null; const a = $("remoteaudio") || Object.assign(document.createElement("audio"), { id: "remoteaudio", autoplay: true }); a.srcObject = e.streams[0]; if (!a.isConnected) $("callpanel").appendChild(a); } };
     p.onconnectionstatechange = () => {
-      if (p.connectionState === "connected") { callStart = Date.now(); $("callstate").textContent = tr("Connected {t}", { t: "0:00" }); clearInterval(callTimer); callTimer = setInterval(() => { const sec = Math.round((Date.now() - callStart) / 1000); $("callstate").textContent = tr("Connected {t}", { t: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` }); }, 1000); if (callRole === "caller") count(callVideo ? "vcall" : "call"); }
-      if (p.connectionState === "failed") { $("callstate").textContent = relayOn ? tr("Couldn't connect these two phones, even through the relay.") : tr("Couldn't connect these two networks directly (no relay yet)."); setTimeout(endCall, 2500); }
+      if (p.connectionState === "connected") { callStart = Date.now(); $("callstate").textContent = tr("Connected {t}", { t: "0:00" }); if (callRole === "caller") relayed(p).then((yes) => { if (yes) count("call_relayed"); }); clearInterval(callTimer); callTimer = setInterval(() => { const sec = Math.round((Date.now() - callStart) / 1000); $("callstate").textContent = tr("Connected {t}", { t: `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` }); }, 1000); if (callRole === "caller") count(callVideo ? "vcall" : "call"); }
+      if (p.connectionState === "failed") { if (callRole === "caller") count("call_failed"); $("callstate").textContent = relayOn ? tr("Couldn't connect these two phones, even through the relay.") : tr("Couldn't connect these two networks directly (no relay yet)."); setTimeout(endCall, 2500); }
       if (p.connectionState === "disconnected" || p.connectionState === "closed") { if (pc === p) endCall(false); }
     };
     return p;
@@ -465,7 +467,7 @@
     try {
       shareStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const track = shareStream.getVideoTracks()[0]; const sender = pc.getSenders().find((x) => x.track && x.track.kind === "video");
-      if (sender) await sender.replaceTrack(track); $("local").srcObject = shareStream; $("share").textContent = tr("Stop sharing");
+      if (sender) await sender.replaceTrack(track); $("local").srcObject = shareStream; $("share").textContent = tr("Stop sharing"); count("share");
       track.onended = stopShare;
     } catch (e) { if (!(e && e.name === "NotAllowedError")) $("callstate").textContent = tr("This device can't share its screen."); shareStream = null; }
   }
@@ -478,7 +480,7 @@
   $("callv").onclick = () => startCall(true);
   addEventListener("pagehide", () => { if (pc) endCall(true); });
 
-  async function burnLine() { count("burn"); setRoute(location.pathname, ""); try { await fetch(`/api/room/${roomId}`, { method: "DELETE" }); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
+  async function burnLine(why = "") { count("burn"); if (why === "panic") count("panic"); setRoute(location.pathname, ""); try { await fetch(`/api/room/${roomId}`, { method: "DELETE" }); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
   $("burn").addEventListener("click", async () => {
     if (!confirm(tr("Burn the line? Every message goes and both codes become paper. There is no undo."))) return;
     await burnLine();
@@ -488,7 +490,7 @@
   // question asked. iPhone asks once for motion permission when it is turned on.
   const PANIC = () => `line:panic:${roomId}`;
   let jolts = [], holdTimer = null;
-  function onMotion(e) { const a = e.accelerationIncludingGravity || e.acceleration; if (!a) return; const g = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2); if (g < 28) return; const now = Date.now(); jolts = jolts.filter((t) => now - t < 2000); jolts.push(now); if (jolts.length >= 3 && roomId && timer !== null) { jolts = []; burnLine(); } }
+  function onMotion(e) { const a = e.accelerationIncludingGravity || e.acceleration; if (!a) return; const g = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2); if (g < 28) return; const now = Date.now(); jolts = jolts.filter((t) => now - t < 2000); jolts.push(now); if (jolts.length >= 3 && roomId && timer !== null) { jolts = []; burnLine("panic"); } }
   function panicUi() {
     let on = false; try { on = localStorage.getItem(PANIC()) === "1"; } catch {}
     $("panic").checked = on; if (on) addEventListener("devicemotion", onMotion); else removeEventListener("devicemotion", onMotion);
@@ -498,7 +500,7 @@
       try { if (want) localStorage.setItem(PANIC(), "1"); else localStorage.removeItem(PANIC()); } catch {}
       panicUi(); $("status").textContent = want ? tr("Panic burn is on for this line on this phone.") : tr("Panic burn is off.");
     };
-    const startHold = () => { if (!$("panic").checked) return; clearTimeout(holdTimer); holdTimer = setTimeout(() => { holdTimer = null; burnLine(); }, 2000); };
+    const startHold = () => { if (!$("panic").checked) return; clearTimeout(holdTimer); holdTimer = setTimeout(() => { holdTimer = null; burnLine("panic"); }, 2000); };
     const endHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } };
     $("rem").onpointerdown = startHold; $("rem").onpointerup = endHold; $("rem").onpointerleave = endHold; $("rem").onpointercancel = endHold;
   }
@@ -939,6 +941,8 @@
   }
   async function pinState() { try { const c = await caches.open("line-pin"); const r = await c.match("/__state"); return r ? await r.json() : null; } catch { return null; } }
   pinSetup();
+  addEventListener("appinstalled", () => { try { localStorage.setItem("line:installed", "1"); } catch {} count("install"); });
+  try { if ((navigator.standalone === true || matchMedia("(display-mode: standalone)").matches) && !localStorage.getItem("line:installed")) { localStorage.setItem("line:installed", "1"); count("install"); } } catch {}
   addEventListener("pagehide", stop);
   // In the background the page hangs up its socket on purpose, so the
   // mailbox treats this phone as absent and taps it instead of delivering
