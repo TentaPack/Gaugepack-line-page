@@ -6,6 +6,7 @@
 // English for now: they are the contract, translated when a lawyer reads it.
 (() => {
   const ES = {
+    "A picture this phone would not load.": "Una foto que este teléfono no quiso cargar.", "A video this phone would not load.": "Un video que este teléfono no quiso cargar.", "A voice note this phone would not load.": "Una nota de voz que este teléfono no quiso cargar.",
     // the front door, the maker, the codes
     "A private line": "Una línea privada",
     "Gaugepack · A private line": "Gaugepack · Una línea privada",

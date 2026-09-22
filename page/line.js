@@ -38,6 +38,17 @@
   const session = (() => { try { let d = localStorage.getItem("line:device"); if (!/^[A-Za-z0-9_-]{16}$/.test(d || "")) { d = b64u(crypto.getRandomValues(new Uint8Array(12))); localStorage.setItem("line:device", d); } return d; } catch { return b64u(crypto.getRandomValues(new Uint8Array(12))); } })();
 
   let key = null, roomId = null, secret = null, timer = null;
+  // Every request to the mailbox carries the room or door id in its body, never in the address: a request log
+  // outside our storage would otherwise pair this phone's address with a room. The socket opens with a
+  // sixty-second single-use ticket the room mints first.
+  const JSONH = { "content-type": "application/json" };
+  const roomApi = (op, body = {}) => fetch("/api/room", { method: "POST", headers: JSONH, body: JSON.stringify({ id: roomId, op, ...body }) });
+  const doorApi = (id, op, body = {}) => fetch("/api/door", { method: "POST", headers: JSONH, body: JSON.stringify({ id, op, ...body }) });
+  // Size and timing say nothing about the kind of message: every sealed payload is padded to the next size bucket
+  // (1, 4, 16, 64, 256 KB, then the largest a piece can be), and every send waits a random 0 to 400 ms.
+  const BUCKETS = [1024, 4096, 16384, 65536, 262144, 675840];
+  const padTo = (text) => { const base = JSON.stringify({ ...JSON.parse(text), p: "" }).length; const target = BUCKETS.find((b) => b >= base) || base; const o = JSON.parse(text); o.p = "x".repeat(target - base); return JSON.stringify(o); };
+  const jitter = () => new Promise((r) => setTimeout(r, Math.floor(Math.random() * 400)));
   const seen = new Set();
 
   // The key. Without a word it is the secret itself. With a word, it is
@@ -110,8 +121,8 @@
   $("burnafter").addEventListener("change", async () => {
     const secs = Number($("burnafter").value) || 0;
     applyBurn(secs, true);
-    const c = await seal(JSON.stringify({ k: "burn", v: secs }));
-    fetch(`/api/room/${roomId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ s: session, c, ...(deviceHash ? { d: deviceHash } : {}) }) }).catch(() => {});
+    const c = await seal(padTo(JSON.stringify({ k: "burn", v: secs })));
+    await jitter(); roomApi("send", { s: session, c, ...(deviceHash ? { d: deviceHash } : {}) }).catch(() => {});
   });
   const byId = new Map(); // message id -> its bubble
   let replyTo = null;     // { id, snippet }
@@ -128,12 +139,18 @@
     li.addEventListener("keydown", (e) => { if (e.target !== li) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); if (!bar.classList.contains("hidden")) bar.querySelector(".act").focus(); } if (e.key === "Escape") bar.classList.add("hidden"); });
   }
   const snippetOf = (m) => m.k === "img" ? tr("a picture") : m.k === "audio" ? tr("a voice note") : String(m.v || "").slice(0, 60);
+  // A picture, a voice note or a video is only ever what the phone sealed: a data address. Anything else (a
+  // web address a peer slipped in) would make this phone fetch it and hand that site this phone's address and
+  // the time: a read receipt with a rough location, sent to someone already inside the room. Refused, and said.
+  const okSrc = (v) => typeof v === "string" && /^data:(image|audio|video)\/[a-z0-9.+-]+;base64,/i.test(v);
+  const refused = (li, what) => { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = what; li.appendChild(n); };
   function drawMsg(m, me, t) {
     const li = document.createElement("li"); if (me) li.className = "me";
     if (m.id) { li.dataset.id = m.id; byId.set(m.id, li); }
     if (m.n && !me) { const who = document.createElement("span"); who.className = "who"; who.textContent = m.n; li.appendChild(who); }
     if (m.q) { const q = document.createElement("blockquote"); q.textContent = m.q; li.appendChild(q); }
-    if (m.k === "img" && m.once && !me) {
+    if ((m.k === "img" || m.k === "video" || m.k === "audio") && !okSrc(m.v)) refused(li, m.k === "img" ? tr("A picture this phone would not load.") : m.k === "video" ? tr("A video this phone would not load.") : tr("A voice note this phone would not load."));
+    else if (m.k === "img" && m.once && !me) {
       // View once: a placeholder until tapped; full screen; burned on close.
       const b = document.createElement("span"); b.className = "once"; b.textContent = tr("Tap to view, once"); b.setAttribute("role", "button"); b.tabIndex = 0;
       const openOnce = () => { $("viewimg").src = m.v; $("viewer").classList.remove("hidden"); $("viewer").onclick = () => { $("viewer").classList.add("hidden"); $("viewimg").src = ""; burnNow(li); }; };
@@ -142,21 +159,21 @@
     } else if (m.k === "img" && m.once && me) { li.appendChild(document.createTextNode(tr("A picture, view once."))); }
     else if (m.k === "img") { const img = document.createElement("img"); img.src = m.v; img.alt = tr("a picture"); li.appendChild(img); }
     else if (m.k === "video") {
-      const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
+      let v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "metadata";
       const mime = m.mime || (m.v.match(/^data:([^;,]+)/) || [])[1] || "video/mp4";
       if (v.canPlayType(mime.split(";")[0]) === "") { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = `A video this phone can't play (${mime.split(";")[0]}).`; li.appendChild(n); }
-      else { try { const bin = atob(m.v.slice(m.v.indexOf(";base64,") + 8)); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); v.src = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch { v.src = m.v; } li.appendChild(v); }
+      else { try { const bin = atob(m.v.slice(m.v.indexOf(";base64,") + 8)); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); v.src = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch { refused(li, tr("A video this phone would not load.")); v = null; } if (v) li.appendChild(v); }
     }
     else if (m.k === "audio") {
       // The sound goes to the player as a file handle, not a data address:
       // iPhone refuses long data addresses in a player and shows "Error".
-      const a = document.createElement("audio"); a.controls = true; a.preload = "metadata";
+      let a = document.createElement("audio"); a.controls = true; a.preload = "metadata";
       const mime = m.mime || (m.v.match(/^data:([^;,]+)/) || [])[1] || "audio/mpeg";
       if (mime && a.canPlayType(mime) === "") { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = `A voice note this phone can't play (${mime}).`; li.appendChild(n); }
       else {
-        try { const bin = atob(m.v.slice(m.v.indexOf(";base64,") + 8)); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); a.src = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch { a.src = m.v; }
-        a.onerror = () => { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = `This phone couldn't load the voice note (${mime}, code ${a.error && a.error.code || "?"}).`; a.replaceWith(n); };
-        li.appendChild(a);
+        try { const bin = atob(m.v.slice(m.v.indexOf(";base64,") + 8)); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); a.src = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch { refused(li, tr("A voice note this phone would not load.")); a = null; }
+        if (a) { a.onerror = () => { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = `This phone couldn't load the voice note (${mime}, code ${a.error && a.error.code || "?"}).`; a.replaceWith(n); };
+        li.appendChild(a); }
       }
     }
     else li.appendChild(document.createTextNode(m.v));
@@ -171,7 +188,7 @@
   const parts = new Map(); // big messages arrive in sealed pieces; joined here, never on the server
   function applyReact(m, me) { const li = byId.get(m.to); if (!li) return; const rx = li.querySelector(".rx"); const tag = document.createElement("span"); tag.textContent = m.v; tag.className = me ? "mine" : ""; rx.appendChild(tag); }
   function line(text, me, t) {
-    const m = parse(text);
+    const m = parse(text); if (m.p !== undefined) { delete m.p; text = JSON.stringify(m); }
     if (m.k === "burn") { applyBurn(Number(m.v) || 0, !me); return; }
     if (m.k === "react") { applyReact(m, me); shown.push({ text, me, t, li: null }); keepShown(); return; }
     if (m.k === "part") { if (me) return; const p = parts.get(m.of) || { n: m.n, got: new Map() }; parts.set(m.of, p); p.got.set(m.i, m.v); if (p.got.size === p.n) { parts.delete(m.of); let whole = ""; for (let i = 0; i < p.n; i++) whole += p.got.get(i) || ""; return line(whole, me, t); } return; }
@@ -182,7 +199,7 @@
 
   async function poll() {
     try {
-      const r = await fetch(`/api/room/${roomId}?s=${session}`, { cache: "no-store" });
+      const r = await roomApi("poll", { s: session });
       if (r.status === 402) { stop(); show("closed"); return; }
       if (r.status === 410) { stop(); show("dead"); return; }
       handle(await r.json());
@@ -225,9 +242,15 @@
     box.innerHTML = ""; box.append(tr("Renewal code ")); const c = document.createElement("strong"); c.style.color = "var(--ink)"; c.style.letterSpacing = ".2em"; c.textContent = code; box.appendChild(c); box.append(tr(", good for ten minutes. "));
     const a = document.createElement("a"); a.href = `/buy?renew=${code}`; a.target = "_blank"; a.rel = "noopener"; a.style.color = "inherit"; a.textContent = tr("Buy a year with it"); box.appendChild(a); box.append(tr(", here or on any other screen."));
   }
-  function connect() {
+  async function connect() {
     try {
-      ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/room/${roomId}/ws?s=${session}`);
+      // A ticket first: random, single-use, sixty seconds, minted by the room; the socket's address carries only that.
+      const tr = await roomApi("ticket", { s: session }).catch(() => null);
+      if (tr && tr.status === 402) { stop(); show("closed"); return; }
+      if (tr && tr.status === 410) { stop(); show("dead"); return; }
+      if (!tr || !tr.ok) { if (timer !== null) setTimeout(() => { if (timer !== null && !ws) connect(); }, 3000); return; }
+      const { t } = await tr.json();
+      ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws?t=${encodeURIComponent(t)}`);
       ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
       ws.onclose = (e) => { ws = null; if (e.reason === "burned") { stop(); show("dead"); return; } if (e.reason === "closed") { stop(); show("closed"); return; } if (timer !== null) setTimeout(() => { if (timer !== null && !ws) connect(); }, 1500); };
       ws.onerror = () => { try { ws.close(); } catch {} };
@@ -244,7 +267,8 @@
     while (queue.length) {
       const item = queue[0];
       try {
-        const r = await fetch(`/api/room/${roomId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ s: session, c: item.c, ...(deviceHash ? { d: deviceHash } : {}) }) });
+        await jitter();
+        const r = await roomApi("send", { s: session, c: item.c, ...(deviceHash ? { d: deviceHash } : {}) });
         if (r.status === 402) { stop(); show("closed"); return; }
         if (r.status === 410) { stop(); show("dead"); return; }
         if (!r.ok && r.status !== 400) throw new Error("again");
@@ -277,8 +301,8 @@
       if (text.length > PART) {
         const n = Math.ceil(text.length / PART);
         if (n > 6) { $("status").textContent = tr("Too big to send, even shrunk."); if (li) burnNow(li); return; }
-        for (let i = 0; i < n; i++) queue.push({ c: await seal(JSON.stringify({ k: "part", of: env.id, i, n, v: text.slice(i * PART, (i + 1) * PART) })), li: i === n - 1 ? li : null });
-      } else queue.push({ c: await seal(text), li });
+        for (let i = 0; i < n; i++) queue.push({ c: await seal(padTo(JSON.stringify({ k: "part", of: env.id, i, n, v: text.slice(i * PART, (i + 1) * PART) }))), li: i === n - 1 ? li : null });
+      } else queue.push({ c: await seal(padTo(text)), li });
       await flush();
     } finally { busy(false); }
   }
@@ -480,7 +504,7 @@
   $("callv").onclick = () => startCall(true);
   addEventListener("pagehide", () => { if (pc) endCall(true); });
 
-  async function burnLine(why = "") { count("burn"); if (why === "panic") count("panic"); setRoute(location.pathname, ""); try { await fetch(`/api/room/${roomId}`, { method: "DELETE" }); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
+  async function burnLine(why = "") { count("burn"); if (why === "panic") count("panic"); setRoute(location.pathname, ""); try { await roomApi("burn"); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
   $("burn").addEventListener("click", async () => {
     if (!confirm(tr("Burn the line? Every message goes and both codes become paper. There is no undo."))) return;
     await burnLine();
@@ -573,7 +597,7 @@
         const { key: k } = await (await fetch("/api/vapid")).json();
         const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: unb64u(k) }));
         const dh = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sub.endpoint)));
-        const r = await fetch(`/api/door/${id}/push`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read, d: dh, sub: sub.toJSON() }) });
+        const r = await doorApi(id, "push", { read: d.read, d: dh, sub: sub.toJSON() });
         $("doornote").textContent = r.ok ? tr("This phone gets a tap when someone knocks.") : "Couldn't keep this phone's address.";
       } catch (e) { $("doornote").textContent = /standalone|home/i.test(String(e)) ? "Add this page to your Home Screen first." : "Couldn't turn that on here."; }
     };
@@ -581,7 +605,7 @@
   }
   async function pollDoor() {
     const d = doorsAll()[doorId]; if (!d) return;
-    let r; try { r = await fetch(`/api/door/${doorId}/read`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read }) }); } catch { return; }
+    let r; try { r = await doorApi(doorId, "read", { read: d.read }); } catch { return; }
     if (r.status === 402) { $("knocks").innerHTML = ""; $("knocks").appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: tr("This door has closed. Reopen it from the maker.") })); return; }
     if (!r.ok) return;
     const { knocks } = await r.json(); const box = $("knocks"); box.innerHTML = "";
@@ -596,7 +620,7 @@
           const sec = await openWith(d.priv, k.c); if (!/^[A-Za-z0-9_-]{43}$/.test(sec)) throw new Error("bad");
           await useSecret(sec); pendingWord = "";
           // The room this phone opened from the sealed knock is the one the door extends to its own date; a knock that named another room extends nothing.
-          await fetch(`/api/door/${doorId}/ack`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ read: d.read, ids: [k.id], rooms: { [k.id]: roomId } }) });
+          await doorApi(doorId, "ack", { read: d.read, ids: [k.id], rooms: { [k.id]: roomId } });
           { const m = remAll(); m[roomId] = { secret: sec, word: "" }; remSave(m); if (!namesGet()[roomId]) nameSet(tr("Knock, {d}", { d: new Date(k.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }), "#E0447C"); }
           setRoute("/line", sec); enterRoom();
         } catch { h.textContent = "Couldn't open this knock (it may have been sealed to another door)."; }
@@ -608,10 +632,10 @@
     $("knockgo").disabled = true; $("knockgo").textContent = tr("Making the line…");
     try {
       const pubRaw = unb64u(pubB64); const id = hex(await crypto.subtle.digest("SHA-256", pubRaw));
-      const info = await (await fetch(`/api/door/${id}/info`)).json().catch(() => ({})); if (!info.open) { $("knocknote").textContent = tr("This door is closed."); $("knockgo").textContent = tr("Closed"); return; }
+      const info = await (await doorApi(id, "info")).json().catch(() => ({})); if (!info.open) { $("knocknote").textContent = tr("This door is closed."); $("knockgo").textContent = tr("Closed"); return; }
       const sec = b64u(crypto.getRandomValues(new Uint8Array(32))); await useSecret(sec); pendingWord = "";
       const c = await sealTo(pubRaw, sec);
-      const r = await fetch(`/api/door/${id}/knock`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: roomId, c }) });
+      const r = await doorApi(id, "knock", { room: roomId, c });
       if (!r.ok) { $("knocknote").textContent = r.status === 402 ? tr("This door is closed.") : r.status === 429 ? tr("Too many knocks from here; try in a minute.") : tr("Couldn't knock."); $("knockgo").disabled = false; $("knockgo").textContent = tr("Open a line"); return; }
       count("line");
       setRoute("/line", sec); enterRoom(); $("status").textContent = tr("Knocked. Their phone has been tapped; when they answer, you're both here.");
@@ -634,11 +658,11 @@
       row.appendChild(left);
       const acts = document.createElement("div"); acts.className = "lacts";
       const act = (label, fn, cls = "btn ghost small") => { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = label; b.onclick = fn; acts.appendChild(b); };
-      const post = async (body) => { await fetch(`/api/lines/${l.id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); loadLines(); };
+      const post = async (body) => { await fetch("/api/lines/act", { method: "POST", headers: JSONH, body: JSON.stringify({ id: l.id, ...body }) }); loadLines(); };
       if (open) act("Close", () => { if (confirm(`Close "${name.textContent}"? Both phones see "this line has closed" and nothing is delivered until it is reopened.`)) post({ action: "close" }); });
       act(open ? "Add a year" : "Reopen, a year", () => post({ action: "year" }));
       act("Rename", () => { const v = prompt("Label for this line (kept in the register only):", l.label || ""); if (v !== null) post({ label: v }); });
-      act("Burn", async () => { if (!confirm(`Burn "${name.textContent}"? Every message goes and both codes become paper. No undo.`)) return; await fetch(`/api/lines/${l.id}`, { method: "DELETE" }); loadLines(); });
+      act("Burn", async () => { if (!confirm(`Burn "${name.textContent}"? Every message goes and both codes become paper. No undo.`)) return; await fetch("/api/lines/act", { method: "POST", headers: JSONH, body: JSON.stringify({ id: l.id, action: "burn" }) }); loadLines(); });
       row.appendChild(acts); box.appendChild(row);
     }
   }
@@ -705,7 +729,7 @@
     $("decoy").onclick = async () => {
       $("decoy").disabled = true;
       const s2 = b64u(crypto.getRandomValues(new Uint8Array(32))); const y = await roomIdOf(s2, "");
-      const r = await fetch(`/api/room/${roomId}/decoy`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decoy: y }) }).catch(() => null);
+      const r = await roomApi("decoy", { decoy: y }).catch(() => null);
       if (!r || !r.ok) { $("decoynote").textContent = tr("Couldn't add a decoy just now."); $("decoy").disabled = false; return; }
       const f = document.createElement("figure"); const d = document.createElement("div"); f.appendChild(d); const c = document.createElement("figcaption"); c.textContent = tr("Decoy"); f.appendChild(c); $("codes").appendChild(f); drawQr(d, `${location.origin}/line?q#${s2}`);
       $("decoynote").textContent = tr("The decoy is the code marked Decoy; it looks like the others once cut. Hand it over and the line is gone before they see anything.");
@@ -740,11 +764,11 @@
       const meta = document.createElement("span"); meta.className = "hint"; meta.textContent = `made ${day(l.made)} · ${l.open ? `open until ${day(l.until)}` : "closed"}`; left.appendChild(meta); row.appendChild(left);
       const acts = document.createElement("div"); acts.className = "lacts";
       const act = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost small"; b.textContent = label; b.onclick = fn; acts.appendChild(b); };
-      const post = async (body) => { await orgApi(`/api/org/lines/${l.id}`, body); orgPage(); };
+      const post = async (body) => { await orgApi("/api/org/line", { id: l.id, ...body }); orgPage(); };
       if (l.open) act("Close", () => { if (confirm(`Close "${name.textContent}"? Every phone in it sees "this line has closed" until you reopen it.`)) post({ action: "close" }); }); else if (o.open) act("Reopen", () => post({ action: "reopen" }));
       act("Rename", () => { const v = prompt("Label for this line:", l.label || ""); if (v !== null) post({ label: v }); });
-      act("Reissue", async () => { if (!confirm(`Reissue "${name.textContent}"? The old stickers become paper and every message in it goes; you print new ones now.`)) return; const rr = await orgApi(`/api/org/lines/${l.id}`, { action: "reissue" }); if (rr.ok) makeLine({ secret: b64u(crypto.getRandomValues(new Uint8Array(32))), word: "", n: l.n || 2, org: true, label: l.label }); });
-      act("Burn", async () => { if (!confirm(`Burn "${name.textContent}"? Every message goes and its stickers become paper. No undo.`)) return; await orgApi(`/api/org/lines/${l.id}`, { action: "burn" }); orgPage(); });
+      act("Reissue", async () => { if (!confirm(`Reissue "${name.textContent}"? The old stickers become paper and every message in it goes; you print new ones now.`)) return; const rr = await orgApi("/api/org/line", { id: l.id, action: "reissue" }); if (rr.ok) makeLine({ secret: b64u(crypto.getRandomValues(new Uint8Array(32))), word: "", n: l.n || 2, org: true, label: l.label }); });
+      act("Burn", async () => { if (!confirm(`Burn "${name.textContent}"? Every message goes and its stickers become paper. No undo.`)) return; await orgApi("/api/org/line", { id: l.id, action: "burn" }); orgPage(); });
       row.appendChild(acts); box.appendChild(row);
     }
     const bill = $("orgbill"); bill.innerHTML = "";
@@ -792,11 +816,11 @@
       const note = (t) => { $("bellnote").textContent = t; };
       const bellOn = (on) => { $("bell").setAttribute("aria-pressed", on ? "true" : "false"); $("bell").title = on ? tr("Notifications are on for this line; tap to turn off") : tr("Tell me when there's something new"); $("bell").setAttribute("aria-label", $("bell").title); };
       let on = false;
-      if (existing) { deviceHash = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(existing.endpoint))); const r = await fetch(`/api/room/${roomId}/push`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ d: deviceHash, sub: existing.toJSON() }) }); on = r.ok; if (on) note(tr("Notifications are on for this line. Only \"something new\", never the words.")); }
+      if (existing) { deviceHash = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(existing.endpoint))); const r = await roomApi("push", { d: deviceHash, sub: existing.toJSON() }); on = r.ok; if (on) note(tr("Notifications are on for this line. Only \"something new\", never the words.")); }
       bellOn(on); $("bell").classList.remove("hidden"); $("notif").classList.remove("hidden");
       $("bell").onclick = async () => {
         if (on) { // off: this phone's address leaves the line
-          try { if (deviceHash) await fetch(`/api/room/${roomId}/push`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ d: deviceHash }) }); } catch {}
+          try { if (deviceHash) await roomApi("unpush", { d: deviceHash }); } catch {}
           on = false; bellOn(false); note(tr("Notifications are off for this line.")); return;
         }
         try {
@@ -804,7 +828,7 @@
           const { key: k } = await (await fetch("/api/vapid")).json();
           const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: unb64u(k) }));
           deviceHash = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sub.endpoint)));
-          const saved = await fetch(`/api/room/${roomId}/push`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ d: deviceHash, sub: sub.toJSON() }) });
+          const saved = await roomApi("push", { d: deviceHash, sub: sub.toJSON() });
           if (!saved.ok) { note("The line couldn't keep this phone's address."); return; }
           on = true; bellOn(true); note(tr("Notifications are on for this line. Only \"something new\", never the words."));
         } catch (e) { note(/standalone|home/i.test(String(e)) ? tr("Add this page to your Home Screen first, then tap the bell.") : tr("Couldn't turn them on here.")); }
