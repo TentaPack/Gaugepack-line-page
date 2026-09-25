@@ -11,7 +11,7 @@
 //     being detectable. We can be forced to publish bad code; we cannot
 //     give one person different code quietly.
 const PUBLISHED = "https://raw.githubusercontent.com/TentaPack/Gaugepack-line-page/main/hashes.json";
-const VERSION = "af0f6993965a7747"; // written by deploy.sh: a digest of every other page file's fingerprint
+const VERSION = "2a521ddc8c1ac543"; // written by deploy.sh: a digest of every other page file's fingerprint
 const FILES = ["index.html", "line.js", "strings.js", "qrcode.js", "line.css", "sw.js", "manifest.webmanifest", "vendor/lame.min.js", "buy.html", "buy.js", "doors.html", "doors.js", "terms.html", "privacy.html", "code.html", "code.js", "status.html", "status.js"];
 const PAGES = { "/": "/index.html", "/line": "/index.html", "/make": "/index.html", "/door": "/index.html", "/d": "/index.html", "/claim": "/index.html", "/org": "/index.html", "/code": "/code.html", "/status": "/status.html", "/buy": "/buy.html", "/doors": "/doors.html", "/terms": "/terms.html", "/privacy": "/privacy.html" };
 const CACHE = `line-${VERSION}`, STATE = "line-pin";

@@ -306,7 +306,7 @@
     try {
       const r = await roomApi("poll", { s: session });
       if (r.status === 402) { stop(); show("closed"); return; }
-      if (r.status === 410) { stop(); show("dead"); return; }
+      if (r.status === 410) { stop(); forgetLine(roomId); show("dead"); return; }
       handle(await r.json());
     } catch {}
   }
@@ -314,10 +314,10 @@
   // the fallback, every second, if the socket cannot be opened.
   let ws = null;
   async function handle(data) {
-    if (data.burned) { forgetShown(); stop(); show("dead"); return; }
+    if (data.burned) { forgetShown(); stop(); forgetLine(roomId); show("dead"); return; }
     if (data.closed) { stop(); show("closed"); return; }
     if (typeof data.here === "number") { $("here").textContent = data.here <= 1 ? tr("Only you here") : tr("{n} here now", { n: data.here }); const can = !pc; $("calla").disabled = !can; $("callv").disabled = !can; }
-    if (typeof data.until === "number") untilUi(data.until);
+    if (typeof data.until === "number") { untilUi(data.until); try { const mm = remAll(); if (mm[roomId]) { mm[roomId].until = data.until; remSave(mm); } } catch {} }
     if (typeof data.ticket === "string") turnTicket = data.ticket;
     const acks = [];
     for (const m of data.messages || []) {
@@ -352,12 +352,12 @@
       // A ticket first: random, single-use, sixty seconds, minted by the room; the socket's address carries only that.
       const tr = await roomApi("ticket", { s: session }).catch(() => null);
       if (tr && tr.status === 402) { stop(); show("closed"); return; }
-      if (tr && tr.status === 410) { stop(); show("dead"); return; }
+      if (tr && tr.status === 410) { stop(); forgetLine(roomId); show("dead"); return; }
       if (!tr || !tr.ok) { if (timer !== null) setTimeout(() => { if (timer !== null && !ws) connect(); }, 3000); return; }
       const { t } = await tr.json();
       ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/ws?t=${encodeURIComponent(t)}`);
       ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch {} };
-      ws.onclose = (e) => { ws = null; if (e.reason === "burned") { stop(); show("dead"); return; } if (e.reason === "closed") { stop(); show("closed"); return; } if (timer !== null) setTimeout(() => { if (timer !== null && !ws) connect(); }, 1500); };
+      ws.onclose = (e) => { ws = null; if (e.reason === "burned") { stop(); forgetLine(roomId); show("dead"); return; } if (e.reason === "closed") { stop(); show("closed"); return; } if (timer !== null) setTimeout(() => { if (timer !== null && !ws) connect(); }, 1500); };
       ws.onerror = () => { try { ws.close(); } catch {} };
     } catch { ws = null; }
   }
@@ -375,7 +375,7 @@
         await jitter();
         const r = await roomApi("send", { s: session, c: item.c, ...(deviceHash ? { d: deviceHash } : {}) });
         if (r.status === 402) { stop(); show("closed"); return; }
-        if (r.status === 410) { stop(); show("dead"); return; }
+        if (r.status === 410) { stop(); forgetLine(roomId); show("dead"); return; }
         if (!r.ok && r.status !== 400) throw new Error("again");
         queue.shift(); if (item.li) item.li.classList.remove("waiting");
         if (r.status === 400) { $("status").textContent = tr("Too big to send; try a smaller picture."); if (item.li) burnNow(item.li); } else await report(r);
@@ -615,7 +615,7 @@
   $("callv").onclick = () => startCall(true);
   addEventListener("pagehide", () => { if (pc) endCall(true); });
 
-  async function burnLine(why = "") { count("burn"); if (why === "panic") count("panic"); setRoute(location.pathname, ""); try { await roomApi("burn"); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); show("dead"); }
+  async function burnLine(why = "") { count("burn"); if (why === "panic") count("panic"); setRoute(location.pathname, ""); try { await roomApi("burn"); } catch {} { const m = remAll(); delete m[roomId]; remSave(m); } forgetShown(); stop(); forgetLine(roomId); show("dead"); }
   $("burn").addEventListener("click", async () => {
     if (!confirm(tr("Burn the line? Every message goes and both codes become paper. There is no undo."))) return;
     await burnLine();
@@ -737,7 +737,7 @@
           await useSecret(sec); pendingWord = "";
           // The room this phone opened from the sealed knock is the one the door extends to its own date; a knock that named another room extends nothing.
           await doorApi(doorId, "ack", { read: d.read, ids: [k.id], rooms: { [k.id]: roomId } });
-          { const m = remAll(); m[roomId] = { secret: sec, word: "" }; remSave(m); if (!namesGet()[roomId]) nameSet(tr("Knock, {d}", { d: new Date(k.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }), "#E0447C"); }
+          { const m = remAll(); m[roomId] = { secret: sec, word: "", added: Date.now() }; remSave(m); if (!namesGet()[roomId]) nameSet(tr("Knock, {d}", { d: new Date(k.t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) }), "#E0447C"); }
           setRoute("/line", sec); enterRoom();
         } catch { h.textContent = "Couldn't open this knock (it may have been sealed to another door)."; }
       };
@@ -966,12 +966,54 @@
   const REMS = "line:remembered:all";
   const remAll = () => { try { const m = JSON.parse(localStorage.getItem(REMS) || "{}"); const old = localStorage.getItem("line:remembered"); if (old && !Object.values(m).some((r) => r.secret === old)) { m["old"] = { secret: old, word: localStorage.getItem("line:remembered:word") || "" }; localStorage.setItem(REMS, JSON.stringify(m)); localStorage.removeItem("line:remembered"); localStorage.removeItem("line:remembered:word"); } return m; } catch { return {}; } };
   const remSave = (m) => { try { localStorage.setItem(REMS, JSON.stringify(m)); } catch {} };
+  // Remove a line from this phone: the remembered secret, its name/colour, and
+  // its message cache. Does not burn the line (the sticker still opens it,
+  // unless it was burned) — this only forgets it here. A burned line is
+  // forgotten automatically the moment this phone finds it dead (below).
+  function forgetLine(id) {
+    try { const m = remAll(); delete m[id]; remSave(m); } catch {}
+    try { const n = namesGet(); delete n[id]; localStorage.setItem(NAMES, JSON.stringify(n)); } catch {}
+    try { sessionStorage.removeItem(`line:shown:${id}`); } catch {}
+  }
+  // The "Your lines on this phone" screen, as a list you can manage, not a
+  // dead end: open, rename, delete each; and a way off it to make or buy
+  // another, so a phone that already has lines is never stuck here.
+  function renderPick() {
+    const m = remAll(), names = namesGet(), ids = Object.keys(m);
+    const list = $("lines"); list.innerHTML = "";
+    if (!ids.length) list.appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: tr("No lines on this phone yet.") }));
+    for (const id of ids) {
+      const r = m[id], n = names[id] || {};
+      const day = (t) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      const live = r.until == null || r.until > Date.now();
+      const row = document.createElement("div"); row.className = "lrow status " + (live ? "open" : "closed");
+      const left = document.createElement("div"); left.className = "lmeta";
+      const name = document.createElement("strong"); name.textContent = n.name || tr("A line"); if (n.colour) name.style.color = n.colour; left.appendChild(name);
+      // Open-until when this phone has seen it, otherwise the date it joined.
+      const meta = r.until != null ? (live ? tr("open until {d}", { d: day(r.until) }) : tr("closed since {d}", { d: day(r.until) })) : r.added ? tr("on this phone since {d}", { d: day(r.added) }) : "";
+      if (meta) left.appendChild(Object.assign(document.createElement("span"), { className: "hint", textContent: meta }));
+      row.appendChild(left);
+      const acts = document.createElement("div"); acts.className = "lacts";
+      const mk = (label, cls, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = label; b.onclick = fn; acts.appendChild(b); };
+      mk(tr("Open"), "btn small", async () => { setRoute("/line", `${r.secret}${r.word ? ".w" : ""}`); await useSecret(r.secret, r.word || ""); pendingWord = r.word || ""; count("return"); enterRoom(); });
+      mk(tr("Rename"), "btn ghost small", () => { const v = prompt(tr("Name this line:"), n.name || ""); if (v !== null) { const nn = namesGet(); nn[id] = { name: v.slice(0, 24), colour: (nn[id] && nn[id].colour) || "#E0447C" }; try { localStorage.setItem(NAMES, JSON.stringify(nn)); } catch {} renderPick(); } });
+      mk(tr("Delete"), "btn ghost small", () => { if (confirm(tr("Remove this line from this phone? Its sticker still opens it again unless the line was burned. Messages are not touched."))) { forgetLine(id); renderPick(); } });
+      // Burn from here: the destructive one, so it says so and asks twice over.
+      mk(tr("Burn"), "btn ghost small danger", async () => { if (!confirm(tr("Burn this line? Every message on both phones goes and both stickers become paper. This cannot be undone."))) return; try { await useSecret(r.secret, r.word || ""); await roomApi("burn"); count("burn"); } catch {} forgetLine(id); renderPick(); });
+      row.appendChild(acts); list.appendChild(row);
+    }
+    const foot = document.createElement("p"); foot.className = "row"; foot.style.marginTop = "16px";
+    const more = document.createElement("a"); more.className = "btn"; more.href = "/"; more.textContent = tr("Make or buy another line"); foot.appendChild(more);
+    if (Object.keys(doorsAll()).length) { const db = document.createElement("button"); db.type = "button"; db.className = "btn ghost"; db.textContent = tr("Your door"); db.onclick = () => { setRoute("/door", ""); showDoor(Object.keys(doorsAll())[0]); }; foot.appendChild(db); }
+    list.appendChild(foot);
+    show("pick");
+  }
   const remembered = () => { const m = remAll(); const r = m[roomId]; return r ? r.secret : ""; };
   function remberUi() {
     const on = remembered() === secret;
     $("rem").setAttribute("aria-pressed", on ? "true" : "false"); $("rem").title = on ? tr("Remembered on this phone; tap to forget") : tr("Remember this line on this phone"); $("rem").setAttribute("aria-label", $("rem").title);
     $("remmark").classList.toggle("gp-live", on);
-    $("rem").onclick = () => { const m = remAll(); if (on) { delete m[roomId]; forgetShown(); } else m[roomId] = { secret, word: pendingWord || "" }; remSave(m); remberUi(); };
+    $("rem").onclick = () => { const m = remAll(); if (on) { delete m[roomId]; forgetShown(); } else m[roomId] = { secret, word: pendingWord || "", added: Date.now() }; remSave(m); remberUi(); };
   }
   // The line's name and colour, kept on this phone only, never sent.
   const NAMES = "line:names";
@@ -998,13 +1040,7 @@
     if (ROUTE.path !== "/make" && !/^[A-Za-z0-9_-]{43}$/.test(s)) {
       const m = remAll(); const ids = Object.keys(m);
       if (ids.length === 1) { const r = m[ids[0]]; s = r.secret; needsWord = false; setRoute("/line", `${s}${r.word ? ".w" : ""}`); if (r.word) { await useSecret(s, r.word); pendingWord = r.word; enterRoom(); return; } }
-      else if (ids.length > 1) {
-        // Several lines on this phone: pick one by its name and colour.
-        const names = namesGet(); const list = $("lines"); list.innerHTML = "";
-        for (const id of ids) { const n = names[id] || {}; const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.style.borderColor = n.colour || "var(--line)"; b.style.color = n.colour || "var(--ink)"; b.textContent = n.name || "A line"; b.onclick = async () => { const r = m[id]; setRoute("/line", `${r.secret}${r.word ? ".w" : ""}`); await useSecret(r.secret, r.word || ""); pendingWord = r.word || ""; count("return"); enterRoom(); }; list.appendChild(b); }
-        if (Object.keys(doorsAll()).length) { const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost"; b.textContent = "Your door"; b.onclick = () => { setRoute("/door", ""); showDoor(Object.keys(doorsAll())[0]); }; list.appendChild(b); }
-        show("pick"); return;
-      }
+      else if (ids.length > 1) { renderPick(); return; }
     }
     if (ROUTE.path !== "/make" && /^[A-Za-z0-9_-]{43}$/.test(s)) {
       // Arrived by a code or a link (not a reload): one anonymous "scan" for the tally.

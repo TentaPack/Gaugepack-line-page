@@ -140,3 +140,7 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
 #claim #claimrow{margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(242,239,233,.03)}
 #org #orgstate{display:inline-block;margin:0 0 14px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(242,239,233,.03);font-size:0.8125rem;color:var(--muted)}
 #org #orgbill .lrow{background:transparent;border-style:dashed}
+
+/* A destructive action on a line card reads as one. */
+.lacts .btn.danger{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.lacts .btn.danger:hover{border-color:var(--accent)}
