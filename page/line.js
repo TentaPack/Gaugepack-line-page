@@ -685,11 +685,12 @@
     const id = hex(await crypto.subtle.digest("SHA-256", pubRaw)); const read = b64u(crypto.getRandomValues(new Uint8Array(32)));
     const readHash = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(read)));
     const r = await fetch("/api/doors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, id, pub: b64u(pubRaw), readHash }) });
-    if (!r.ok) { $("doornote").textContent = r.status === 403 ? "That door link was already used or is older than an hour. Make a new one from the maker." : "Couldn't make the door."; show("door"); return; }
+    if (!r.ok) { $("doornote").textContent = r.status === 429 ? "Just made one — give it a minute and try again." : r.status === 403 ? "That door link was already used or is older than an hour. Make a new one from the maker." : "Couldn't make the door."; show("door"); return; }
     const made = await r.json().catch(() => ({}));
-    const m = doorsAll(); m[id] = { priv, pub: b64u(pubRaw), read, label: "", made: Date.now(), until: made.until || 0, sold: !!made.sold }; doorsSave(m);
+    const m = doorsAll(); m[id] = { priv, pub: b64u(pubRaw), read, label: "", made: Date.now(), until: made.until || 0, sold: !!made.sold, free: !!made.free }; doorsSave(m);
     setRoute("/door", ""); showDoor(id);
     if (made.sold) $("doornote").textContent = `This phone is the door now; only it can answer. Print the code on your card, your window, your table. Open while the subscription is paid (through ${new Date(made.until).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })} so far); manage it from the receipt Stripe emailed you.`;
+    else if (made.free) $("doornote").textContent = `A free door, this phone is the one that answers it. Print or share the code; anyone who scans it opens a private line with you. It stays up for a week (through ${new Date(made.until).toLocaleDateString(undefined, { month: "short", day: "numeric" })}) — make another to keep it going.`;
   }
   let doorTimer = null, doorId = null;
   function stopDoorPoll() { if (doorTimer) clearInterval(doorTimer); doorTimer = null; }
@@ -1005,6 +1006,7 @@
     const foot = document.createElement("p"); foot.className = "row"; foot.style.marginTop = "16px";
     const more = document.createElement("a"); more.className = "btn"; more.href = "/make"; more.textContent = tr("Make or buy another line"); foot.appendChild(more);
     if (Object.keys(doorsAll()).length) { const db = document.createElement("button"); db.type = "button"; db.className = "btn ghost"; db.textContent = tr("Your door"); db.onclick = () => { setRoute("/door", ""); showDoor(Object.keys(doorsAll())[0]); }; foot.appendChild(db); }
+    else { const db = document.createElement("button"); db.type = "button"; db.className = "btn ghost"; db.textContent = tr("Make a door"); db.onclick = () => makeDoor(""); foot.appendChild(db); }
     list.appendChild(foot);
     show("pick");
   }
@@ -1107,6 +1109,9 @@
     }
     $("new").addEventListener("click", makeLine);
     $("remake").addEventListener("click", makeLine);
+    // A free door, for anyone: no token, no sign-in. makeDoor("") takes the
+    // free path on the server (rate-limited, a week long).
+    if ($("makedoor")) $("makedoor").addEventListener("click", () => makeDoor(""));
   })();
   // The pin (the trojan-page defence): the service worker keeps the page
   // this phone runs and takes an update only when every file is on the
