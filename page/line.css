@@ -81,3 +81,62 @@ code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
 #callpanel .callmark{display:none}#callpanel.voice .callmark{display:block;color:var(--ink)}#callpanel.voice .callmark .gp-mark{width:64px;height:64px}
 #log li video{display:block;max-width:100%;max-height:320px;border-radius:10px;background:#000}
 .markbtn[aria-pressed="true"] .bell-dot{fill:var(--accent)}
+
+
+/* ---- Batch A: a more tech-forward chat (doc PRODUCT_BOUNDARY) ---- */
+/* Rich text rendered on this phone only; the wire still carries raw text. */
+#log li code{font-family:ui-monospace,Menlo,monospace;font-size:.9em;background:rgba(242,239,233,.1);border:1px solid var(--line);border-radius:5px;padding:.5px 5px}
+#log li s{opacity:.7}
+#log li .spoiler{background:rgba(242,239,233,.16);border-radius:5px;padding:0 3px;color:transparent;cursor:pointer;filter:blur(.35em);transition:filter .18s,color .18s,background .18s;-webkit-user-select:none;user-select:none}
+#log li .spoiler.revealed{color:inherit;filter:none;background:rgba(242,239,233,.06);cursor:auto;-webkit-user-select:text;user-select:text}
+/* Messages arrive with a small settle; nothing moves for people who ask it not to. */
+#log li.in{animation:msgIn .2s cubic-bezier(.2,.7,.2,1)}
+@keyframes msgIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+#log li{transition:transform .12s ease,opacity .12s ease}
+/* Jump-to-latest, floating above the composer; carries a count when there is new below. */
+.tolatest{position:sticky;bottom:64px;align-self:flex-end;display:inline-flex;align-items:center;gap:6px;margin:0 2px -34px auto;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(10,10,10,.86);backdrop-filter:blur(8px);color:var(--ink);cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4);z-index:2}
+.tolatest .n{font:600 .75rem/1 ui-monospace,Menlo,monospace;color:var(--accent)}
+.tolatest.hasnew{border-color:var(--me-line)}
+.tolatest:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){#log li.in{animation:none}#log li{transition:none}#log li .spoiler{transition:none}}
+
+#log li .spd{display:inline-block;margin-top:6px;font:600 .75rem/1 ui-monospace,Menlo,monospace;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+#log li .spd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* "What it refuses" — the paid pitch at the point of consideration (PRODUCT_BOUNDARY). */
+.refuse{margin:20px 0 4px;padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(242,239,233,.03)}
+.reflist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.reflist li{position:relative;padding-left:26px;color:var(--muted);font-size:0.9375rem;line-height:1.5}
+.reflist li b{color:var(--ink)}
+.reflist li::before{content:"";position:absolute;left:2px;top:.5em;width:12px;height:12px;border-radius:50%;border:1.5px solid var(--accent)}
+.reflist li::after{content:"";position:absolute;left:6.5px;top:calc(.5em + 4.5px);width:9px;height:1.5px;background:var(--accent);transform:rotate(0deg)}
+
+
+/* ---- The door and its entry pages ---- */
+/* Knock (a stranger's first impression): three plain reassurances with icons. */
+.assure{list-style:none;margin:14px 0 4px;padding:0;display:grid;gap:12px}
+.assure li{display:flex;align-items:center;gap:12px;color:var(--ink);font-size:0.9375rem}
+.assure li svg{flex-shrink:0;color:var(--accent)}
+.assure li span{color:var(--muted)}
+/* A knock arriving in the door's live list settles in the way a message does. */
+.lrow.in{animation:rowIn .22s cubic-bezier(.2,.7,.2,1)}
+@keyframes rowIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.lrow.in{animation:none}}
+
+/* ---- Claim and org management: calmer cards, clear status ---- */
+/* List rows read as cards now (shared by org lines, the bill, and the door's
+   knock list), not hairline dividers. */
+.lrow{padding:12px 14px;border-top:0;border:1px solid var(--line);border-radius:12px;background:rgba(242,239,233,.03);margin-bottom:8px;transition:border-color .15s,background .15s}
+.lrow:hover{border-color:rgba(242,239,233,.24)}
+.lmeta strong{font-size:0.9375rem}
+/* A status dot for a line you own: lit when open, dim when closed. */
+.lrow.status .lmeta{padding-left:18px;position:relative}
+.lrow.status .lmeta::before{content:"";position:absolute;left:0;top:.42em;width:8px;height:8px;border-radius:50%}
+.lrow.open .lmeta::before{background:#2E9B5C;box-shadow:0 0 0 3px rgba(46,155,92,.18)}
+.lrow.closed .lmeta::before{background:var(--muted);opacity:.5}
+.lacts .btn.small{padding:7px 11px}
+/* The claim page is a confirmation moment: give it room and centre it. */
+#claim h1{margin-top:8px}
+#claim #claimrow{margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(242,239,233,.03)}
+#org #orgstate{display:inline-block;margin:0 0 14px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(242,239,233,.03);font-size:0.8125rem;color:var(--muted)}
+#org #orgbill .lrow{background:transparent;border-style:dashed}

@@ -26,6 +26,84 @@
   const setRoute = (path, hash) => { try { if (hash) sessionStorage.setItem("line:route", JSON.stringify({ path, hash })); else sessionStorage.removeItem("line:route"); } catch {} if (location.pathname !== path || location.hash || location.search) history.replaceState(null, "", path); };
   // Words shown to people go through the strings file (Spanish by the phone's language); without it, English.
   const tr = (s, vars) => window.t ? window.t(s, vars) : (vars ? Object.entries(vars).reduce((o, [k, v]) => o.split(`{${k}}`).join(String(v)), s) : s);
+
+  // A small buzz for the actions that deserve one. Silent where the phone
+  // has no vibrate (desktop, iPhone Safari); never more than a tap.
+  const buzz = (ms = 10) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+
+  // A knocker's per-door handle (doc PRODUCT_BOUNDARY): stable for one door so
+  // the owner can block it, different for every other door so nobody links a
+  // person across doors, and never a real identity. Derived on this phone from
+  // a local seed that never leaves it; the door only ever sees the opaque
+  // result. The seed persists so the same phone is the same knocker next time.
+  async function knockerHandle(doorPubB64) {
+    let seed; try { seed = localStorage.getItem("knocker:seed"); } catch {}
+    if (!seed) { seed = b64u(crypto.getRandomValues(new Uint8Array(32))); try { localStorage.setItem("knocker:seed", seed); } catch {} }
+    const raw = new TextEncoder().encode(`${seed}:${doorPubB64}`);
+    const d = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+    return b64u(d).slice(0, 22);
+  }
+
+  // Rich text, rendered on this phone only: nothing about it is sent, the
+  // wire still carries the raw characters. Built as DOM nodes, never innerHTML
+  // of anything a person typed, so a message can style itself but can never
+  // become markup. Spoilers earn their place in a privacy tool: the words are
+  // there, blurred, until the reader chooses. WhatsApp's marks: *bold*,
+  // _italic_, ~strike~, `code`, and ||spoiler||.
+  function styleEl(tag, inner) {
+    if (tag === "spoiler") {
+      const el = document.createElement("span"); el.className = "spoiler"; el.textContent = inner;
+      el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", tr("hidden, tap to reveal"));
+      const reveal = () => { el.classList.add("revealed"); el.removeAttribute("role"); };
+      el.addEventListener("click", (e) => { if (!el.classList.contains("revealed")) { e.stopPropagation(); reveal(); } });
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reveal(); } });
+      return el;
+    }
+    const el = document.createElement(tag); el.textContent = inner; return el;
+  }
+  const RICH = [["`", "`", "code"], ["||", "||", "spoiler"], ["*", "*", "strong"], ["_", "_", "em"], ["~", "~", "s"]];
+  function inlineInto(parent, text) {
+    let i = 0, run = "";
+    const flush = () => { if (run) { parent.appendChild(document.createTextNode(run)); run = ""; } };
+    while (i < text.length) {
+      let hit = null;
+      for (const [open, close, tag] of RICH) {
+        if (!text.startsWith(open, i)) continue;
+        const from = i + open.length, end = text.indexOf(close, from);
+        if (end < 0 || end === from) continue;
+        const inner = text.slice(from, end);
+        // For *_~ the inner may not begin or end with a space (WhatsApp's rule);
+        // this keeps "2 * 3" and stray underscores from styling by accident.
+        if ("*_~".includes(open) && inner !== inner.trim()) continue;
+        hit = { tag, inner, next: end + close.length }; break;
+      }
+      if (hit) { flush(); parent.appendChild(styleEl(hit.tag, hit.inner)); i = hit.next; }
+      else { run += text[i]; i++; }
+    }
+    flush();
+  }
+  function richText(str) {
+    const frag = document.createDocumentFragment();
+    String(str).split("\n").forEach((ln, i) => { if (i) frag.appendChild(document.createElement("br")); inlineInto(frag, ln); });
+    return frag;
+  }
+
+  let restoring = false;  // true while redrawing remembered messages, so they do not each animate in
+  let newSince = 0;       // messages arrived while scrolled up, counted for the jump button
+  const logEl = () => document.getElementById("log");
+  const atBottom = () => { const l = logEl(); return !l || (l.scrollHeight - l.scrollTop - l.clientHeight) < 60; };
+  function toLatestUi() {
+    const btn = document.getElementById("tolatest"); if (!btn) return;
+    btn.classList.toggle("hidden", newSince === 0 && atBottom());
+    btn.querySelector(".n").textContent = newSince > 0 ? (newSince > 99 ? "99+" : String(newSince)) : "";
+    btn.classList.toggle("hasnew", newSince > 0);
+  }
+  function setupScroll() {
+    const l = logEl(); if (!l || l.dataset.scrollwired) return; l.dataset.scrollwired = "1";
+    l.addEventListener("scroll", () => { if (atBottom()) newSince = 0; toLatestUi(); }, { passive: true });
+    const btn = document.getElementById("tolatest");
+    if (btn) btn.onclick = () => { newSince = 0; const last = l.lastElementChild; if (last) last.scrollIntoView({ block: "end", behavior: "smooth" }); toLatestUi(); };
+  }
   const show = (id) => { for (const s of ["make", "room", "dead", "home", "word", "pick", "closed", "door", "knock", "claim", "org"]) $(s).classList.toggle("hidden", s !== id); if (id !== "door") stopDoorPoll(); };
   let pendingWord = "";
   const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -50,6 +128,7 @@
   const padTo = (text) => { const base = JSON.stringify({ ...JSON.parse(text), p: "" }).length; const target = BUCKETS.find((b) => b >= base) || base; const o = JSON.parse(text); o.p = "x".repeat(target - base); return JSON.stringify(o); };
   const jitter = () => new Promise((r) => setTimeout(r, Math.floor(Math.random() * 400)));
   const seen = new Set();
+  const knockSeen = new Set();  // door: which knocks already animated in, so a re-render does not re-animate them
 
   // The key. Without a word it is the secret itself. With a word, it is
   // stretched from the secret and the word together (PBKDF2, 200,000
@@ -95,6 +174,10 @@
   const shown = [];
   async function keepShown() { try { sessionStorage.setItem(`line:shown:${roomId}`, await seal(JSON.stringify(shown.slice(-200).filter((m) => !(parse(m.text).once)).map(({ text, me, t }) => ({ text, me, t }))))); } catch {} }
   async function restoreShown() {
+    restoring = true;
+    try { return await restoreShownInner(); } finally { restoring = false; newSince = 0; toLatestUi(); }
+  }
+  async function restoreShownInner() {
     try { const c = sessionStorage.getItem(`line:shown:${roomId}`); if (!c) return; for (const m of JSON.parse(await open(c))) { const pm = parse(m.text); if (pm.k === "react") { applyReact(pm, m.me); shown.push({ ...m, li: null }); continue; } if (pm.k === "burn" || pm.k === "unsend") continue; const li = drawMsg(pm, m.me, m.t); shown.push({ ...m, li }); } } catch {}
   }
   function forgetShown() { try { sessionStorage.removeItem(`line:shown:${roomId}`); } catch {} }
@@ -129,9 +212,20 @@
   function actionsFor(li, m, me) {
     const bar = document.createElement("div"); bar.className = "acts hidden";
     const mk = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "act"; b.textContent = label; b.onclick = (e) => { e.stopPropagation(); fn(); bar.classList.add("hidden"); }; return b; };
-    for (const r of ["♥", "👍", "😂", "😮", "😢", "🔥"]) bar.appendChild(mk(r, () => { const env = { k: "react", to: m.id, v: r }; sendEnvelope(env, true); line(JSON.stringify(env), true, Date.now()); }));
-    bar.appendChild(mk(tr("Reply"), () => { replyTo = { id: m.id, snippet: snippetOf(m) }; $("quote").textContent = tr("Replying to: {s}", { s: replyTo.snippet }); $("quotebar").classList.remove("hidden"); $("text").focus(); }));
+    for (const r of ["♥", "👍", "😂", "😮", "😢", "🔥"]) bar.appendChild(mk(r, () => { const env = { k: "react", to: m.id, v: r }; sendEnvelope(env, true); line(JSON.stringify(env), true, Date.now()); buzz(10); }));
+    const startReply = () => { replyTo = { id: m.id, snippet: snippetOf(m) }; $("quote").textContent = tr("Replying to: {s}", { s: replyTo.snippet }); $("quotebar").classList.remove("hidden"); $("text").focus(); buzz(8); };
+    bar.appendChild(mk(tr("Reply"), startReply));
+    if ((m.k === "text" || !m.k) && navigator.clipboard) bar.appendChild(mk(tr("Copy"), () => { try { navigator.clipboard.writeText(String(m.v || "")); } catch {} }));
     if (me) bar.appendChild(mk(tr("Take back"), () => { sendEnvelope({ k: "unsend", to: m.id }, true); burnNow(li); }));
+    const react = (r) => { const env = { k: "react", to: m.id, v: r }; sendEnvelope(env, true); line(JSON.stringify(env), true, Date.now()); buzz(10); };
+    // Double-tap a bubble to heart it, the way every messenger has taught the thumb.
+    li.addEventListener("dblclick", (e) => { if (e.target.closest("audio, video, .once, a, .spoiler")) return; react("♥"); });
+    // Swipe a bubble to the right to reply to it.
+    let sx = 0, sy = 0, sw = false;
+    li.addEventListener("touchstart", (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; sw = false; }, { passive: true });
+    li.addEventListener("touchmove", (e) => { const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy; if (!sw && dx > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) sw = true; if (sw) { e.preventDefault(); li.style.transform = `translateX(${Math.min(dx, 64)}px)`; li.style.opacity = String(Math.max(0.6, 1 - dx / 260)); } }, { passive: false });
+    const endSwipe = (e) => { if (!sw) return; const dx = (e.changedTouches ? e.changedTouches[0].clientX : sx) - sx; li.style.transform = ""; li.style.opacity = ""; if (dx > 56) startReply(); sw = false; };
+    li.addEventListener("touchend", endSwipe); li.addEventListener("touchcancel", endSwipe);
     li.appendChild(bar);
     li.tabIndex = 0; li.setAttribute("role", "listitem");
     const toggle = () => { for (const o of document.querySelectorAll(".acts")) if (o !== bar) o.classList.add("hidden"); bar.classList.toggle("hidden"); };
@@ -173,14 +267,25 @@
       else {
         try { const bin = atob(m.v.slice(m.v.indexOf(";base64,") + 8)); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); a.src = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch { refused(li, tr("A voice note this phone would not load.")); a = null; }
         if (a) { a.onerror = () => { const n = document.createElement("span"); n.className = "hint"; n.style.display = "inline"; n.textContent = `This phone couldn't load the voice note (${mime}, code ${a.error && a.error.code || "?"}).`; a.replaceWith(n); };
-        li.appendChild(a); }
+        li.appendChild(a);
+        // Playback speed, for a long voice note: 1x, 1.5x, 2x. The player is
+        // the same one iPhone tolerates; this only sets its rate.
+        const speeds = [1, 1.5, 2]; let si = 0; const spd = document.createElement("button");
+        spd.type = "button"; spd.className = "spd"; spd.textContent = "1×"; spd.title = tr("Playback speed");
+        spd.onclick = (e) => { e.stopPropagation(); si = (si + 1) % speeds.length; a.playbackRate = speeds[si]; spd.textContent = speeds[si] + "×"; };
+        li.appendChild(spd); }
       }
     }
+    else if (m.k === "text" || !m.k) li.appendChild(richText(m.v));
     else li.appendChild(document.createTextNode(m.v));
     const rx = document.createElement("span"); rx.className = "rx"; li.appendChild(rx);
     const tm = document.createElement("time"); tm.textContent = when(t); li.appendChild(tm);
     if (m.id) actionsFor(li, m, me);
-    $("log").appendChild(li); li.scrollIntoView({ block: "end" });
+    if (!restoring) li.classList.add("in");
+    const wasBottom = atBottom();
+    $("log").appendChild(li);
+    if (!restoring && (me || wasBottom)) li.scrollIntoView({ block: "end" });
+    else if (!restoring && !me) { newSince++; toLatestUi(); }
     schedule(li, Date.now());
     return li;
   }
@@ -381,10 +486,16 @@
   $("mic").addEventListener("contextmenu", (e) => e.preventDefault());
   $("mic").addEventListener("contextmenu", (e) => e.preventDefault());
 
+  // Draft: what you were typing survives a reload, per line, on this phone
+  // only (sessionStorage, gone when the tab closes — not kept the way a
+  // message is refused).
+  const draftKey = () => `line:draft:${roomId}`;
+  $("text").addEventListener("input", () => { try { const v = $("text").value; if (v) sessionStorage.setItem(draftKey(), v); else sessionStorage.removeItem(draftKey()); } catch {} });
   $("send").addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = $("text").value.trim(); if (!text) return;
-    $("text").value = "";
+    $("text").value = ""; try { sessionStorage.removeItem(draftKey()); } catch {}
+    buzz(12);
     await sendEnvelope({ k: "text", v: text });
   });
   // Short videos: picked from the phone, shrunk on the phone (480 wide, 15
@@ -589,6 +700,10 @@
     const url = `${location.origin}/d?q#${d.pub}`, link = `${location.origin}/d?l#${d.pub}`;
     drawQr($("doorqr"), url); $("doorlabel").textContent = d.label || "Your door";
     $("doorcopy").onclick = async () => { try { await navigator.clipboard.writeText(link); $("doorcopy").textContent = tr("Copied"); setTimeout(() => ($("doorcopy").textContent = tr("Copy the link")), 1500); } catch {} };
+    // The native share sheet, where the phone has one: the fastest way a
+    // business hands its door to somebody. Falls back to the copy button.
+    if (navigator.share) { $("doorshare").classList.remove("hidden"); $("doorshare").onclick = async () => { try { await navigator.share({ title: tr("A private line"), text: tr("Open a private line with me — sealed, no account."), url: link }); } catch {} }; }
+    else { $("doorshare").classList.add("hidden"); }
     $("doordl").onclick = async () => { const svg = $("doorqr").innerHTML; const img = new Image(); await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); }); const c = document.createElement("canvas"); c.width = 900; c.height = 900; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, 900, 900); g.drawImage(img, 50, 50, 800, 800); const a = document.createElement("a"); a.download = "door.png"; a.href = c.toDataURL("image/png"); a.click(); };
     $("doorbell").onclick = async () => {
       try {
@@ -612,7 +727,8 @@
     if (!knocks.length) { box.appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: tr("Nobody waiting. This phone checks every few seconds while this page is open, and gets a tap when it isn't.") })); return; }
     for (const k of knocks) {
       const row = document.createElement("div"); row.className = "lrow";
-      const left = document.createElement("div"); left.className = "lmeta"; const t = document.createElement("strong"); t.textContent = tr("Someone knocked"); left.appendChild(t);
+      if (!knockSeen.has(k.id)) { knockSeen.add(k.id); row.classList.add("in"); }
+      const left = document.createElement("div"); left.className = "lmeta"; const t = document.createElement("strong"); t.textContent = k.name ? tr("{n} knocked", { n: k.name }) : tr("Someone knocked"); left.appendChild(t);
       const ago = Math.max(0, Math.round((Date.now() - k.t) / 60000)); const h = document.createElement("span"); h.className = "hint"; h.textContent = ago < 1 ? tr("just now") : tr("{n} min ago", { n: ago }); left.appendChild(h); row.appendChild(left);
       const b = document.createElement("button"); b.type = "button"; b.className = "btn small"; b.textContent = tr("Answer");
       b.onclick = async () => {
@@ -625,7 +741,11 @@
           setRoute("/line", sec); enterRoom();
         } catch { h.textContent = "Couldn't open this knock (it may have been sealed to another door)."; }
       };
-      row.appendChild(b); box.appendChild(row);
+      const acts = document.createElement("div"); acts.className = "lacts"; acts.appendChild(b);
+      if (k.h) { const bl = document.createElement("button"); bl.type = "button"; bl.className = "btn ghost small"; bl.textContent = tr("Block");
+        bl.onclick = async () => { if (!confirm(tr("Block this knocker? Their knocks stop reaching you, including the ones waiting. A new name won't get them past it."))) return; try { await doorApi(doorId, "block", { read: d.read, h: k.h }); } catch {} pollDoor(); };
+        acts.appendChild(bl); }
+      row.appendChild(acts); box.appendChild(row);
     }
   }
   async function knock(pubB64) {
@@ -635,7 +755,9 @@
       const info = await (await doorApi(id, "info")).json().catch(() => ({})); if (!info.open) { $("knocknote").textContent = tr("This door is closed."); $("knockgo").textContent = tr("Closed"); return; }
       const sec = b64u(crypto.getRandomValues(new Uint8Array(32))); await useSecret(sec); pendingWord = "";
       const c = await sealTo(pubRaw, sec);
-      const r = await doorApi(id, "knock", { room: roomId, c });
+      const knockName = ($("knockname") && $("knockname").value || "").trim().slice(0, 24);
+      const handle = await knockerHandle(pubB64);
+      const r = await doorApi(id, "knock", { room: roomId, c, h: handle, name: knockName });
       if (!r.ok) { $("knocknote").textContent = r.status === 402 ? tr("This door is closed.") : r.status === 429 ? tr("Too many knocks from here; try in a minute.") : tr("Couldn't knock."); $("knockgo").disabled = false; $("knockgo").textContent = tr("Open a line"); return; }
       count("line");
       setRoute("/line", sec); enterRoom(); $("status").textContent = tr("Knocked. Their phone has been tapped; when they answer, you're both here.");
@@ -759,7 +881,7 @@
     const box = $("orglines"); box.innerHTML = "";
     if (!o.lines.length) box.appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: "No lines yet. Make one above." }));
     for (const l of o.lines) {
-      const row = document.createElement("div"); row.className = "lrow";
+      const row = document.createElement("div"); row.className = "lrow status " + (l.open ? "open" : "closed");
       const left = document.createElement("div"); left.className = "lmeta"; const name = document.createElement("strong"); name.textContent = l.label || `Line ${l.id.slice(0, 6)}`; left.appendChild(name);
       const meta = document.createElement("span"); meta.className = "hint"; meta.textContent = `made ${day(l.made)} · ${l.open ? `open until ${day(l.until)}` : "closed"}`; left.appendChild(meta); row.appendChild(left);
       const acts = document.createElement("div"); acts.className = "lacts";
@@ -837,7 +959,7 @@
     } catch {}
   }
   function meUi() { $("me").value = myName(); $("me").onchange = () => { try { localStorage.setItem(`line:me:${roomId}`, $("me").value.slice(0, 24)); } catch {} }; $("quoteclose").onclick = () => { replyTo = null; $("quotebar").classList.add("hidden"); }; }
-  function enterRoom() { $("calla").disabled = false; $("callv").disabled = false; try { if (!localStorage.getItem(`line:in:${roomId}`)) { localStorage.setItem(`line:in:${roomId}`, "1"); count("open"); } } catch {} meUi(); panicUi(); show("room"); $("log").innerHTML = ""; seen.clear(); shown.length = 0; restoreShown().then(() => { start(); }); $("text").focus(); pushSetup(); remberUi(); nameUi(); fingerprint().then((f) => { $("roomfp").textContent = f; }); }
+  function enterRoom() { $("calla").disabled = false; $("callv").disabled = false; try { if (!localStorage.getItem(`line:in:${roomId}`)) { localStorage.setItem(`line:in:${roomId}`, "1"); count("open"); } } catch {} meUi(); panicUi(); show("room"); $("log").innerHTML = ""; seen.clear(); shown.length = 0; restoreShown().then(() => { start(); setupScroll(); }); try { const dr = sessionStorage.getItem(`line:draft:${roomId}`); if (dr) $("text").value = dr; } catch {} $("text").focus(); pushSetup(); remberUi(); nameUi(); fingerprint().then((f) => { $("roomfp").textContent = f; }); }
 
   // Remembering, opt in: the key kept on this phone only, so the icon opens
   // the line by itself. Off by default; the sticker is the key.
