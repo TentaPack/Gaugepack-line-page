@@ -1003,7 +1003,7 @@
       row.appendChild(acts); list.appendChild(row);
     }
     const foot = document.createElement("p"); foot.className = "row"; foot.style.marginTop = "16px";
-    const more = document.createElement("a"); more.className = "btn"; more.href = "/"; more.textContent = tr("Make or buy another line"); foot.appendChild(more);
+    const more = document.createElement("a"); more.className = "btn"; more.href = "/make"; more.textContent = tr("Make or buy another line"); foot.appendChild(more);
     if (Object.keys(doorsAll()).length) { const db = document.createElement("button"); db.type = "button"; db.className = "btn ghost"; db.textContent = tr("Your door"); db.onclick = () => { setRoute("/door", ""); showDoor(Object.keys(doorsAll())[0]); }; foot.appendChild(db); }
     list.appendChild(foot);
     show("pick");
